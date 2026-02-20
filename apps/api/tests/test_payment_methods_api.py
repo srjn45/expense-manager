@@ -3,11 +3,14 @@
 import uuid
 from datetime import datetime
 
+import pytest
 import pytest_asyncio
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import PaymentMethod
+
+pytestmark = pytest.mark.integration
 
 
 @pytest_asyncio.fixture
@@ -196,4 +199,111 @@ async def test_get_payment_method_by_id_404_not_found(client: AsyncClient):
 async def test_get_payment_method_by_id_422_invalid_uuid(client: AsyncClient):
     """GET /payment-methods/{id} with invalid UUID format returns 422."""
     response = await client.get("/api/v1/payment-methods/not-a-uuid")
+    assert response.status_code == 422
+
+
+# --- PUT /api/v1/payment-methods/{id} (Step 4) ---
+
+
+async def test_put_payment_method_200_valid_body(
+    client: AsyncClient,
+    one_active_payment_method: PaymentMethod,
+):
+    """PUT with valid body and existing id returns 200 and data with updated values."""
+    response = await client.put(
+        f"/api/v1/payment-methods/{one_active_payment_method.id}",
+        json={"name": "CardUpdated", "currency": "USD"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert "data" in body
+    data = body["data"]
+    assert data["id"] == str(one_active_payment_method.id)
+    assert data["name"] == "CardUpdated"
+    assert data["currency"] == "USD"
+    assert data["active"] is True
+    assert "createdAt" in data
+    # GET same id returns updated values
+    get_resp = await client.get(f"/api/v1/payment-methods/{one_active_payment_method.id}")
+    assert get_resp.status_code == 200
+    assert get_resp.json()["data"]["name"] == "CardUpdated"
+    assert get_resp.json()["data"]["currency"] == "USD"
+
+
+async def test_put_payment_method_404_not_found(client: AsyncClient):
+    """PUT with non-existent id returns 404."""
+    response = await client.put(
+        f"/api/v1/payment-methods/{uuid.uuid4()}",
+        json={"name": "X", "currency": "INR"},
+    )
+    assert response.status_code == 404
+    assert "detail" in response.json()
+
+
+async def test_put_payment_method_422_missing_name(
+    client: AsyncClient,
+    one_active_payment_method: PaymentMethod,
+):
+    """PUT without name returns 422."""
+    response = await client.put(
+        f"/api/v1/payment-methods/{one_active_payment_method.id}",
+        json={"currency": "INR"},
+    )
+    assert response.status_code == 422
+
+
+async def test_put_payment_method_422_missing_currency(
+    client: AsyncClient,
+    one_active_payment_method: PaymentMethod,
+):
+    """PUT without currency returns 422."""
+    response = await client.put(
+        f"/api/v1/payment-methods/{one_active_payment_method.id}",
+        json={"name": "Card"},
+    )
+    assert response.status_code == 422
+
+
+async def test_put_payment_method_422_empty_name(
+    client: AsyncClient,
+    one_active_payment_method: PaymentMethod,
+):
+    """PUT with empty name returns 422."""
+    response = await client.put(
+        f"/api/v1/payment-methods/{one_active_payment_method.id}",
+        json={"name": "", "currency": "INR"},
+    )
+    assert response.status_code == 422
+
+
+async def test_put_payment_method_422_empty_currency(
+    client: AsyncClient,
+    one_active_payment_method: PaymentMethod,
+):
+    """PUT with empty currency returns 422."""
+    response = await client.put(
+        f"/api/v1/payment-methods/{one_active_payment_method.id}",
+        json={"name": "Card", "currency": ""},
+    )
+    assert response.status_code == 422
+
+
+async def test_put_payment_method_422_invalid_type_name(
+    client: AsyncClient,
+    one_active_payment_method: PaymentMethod,
+):
+    """PUT with name as number returns 422."""
+    response = await client.put(
+        f"/api/v1/payment-methods/{one_active_payment_method.id}",
+        json={"name": 123, "currency": "INR"},
+    )
+    assert response.status_code == 422
+
+
+async def test_put_payment_method_422_invalid_uuid(client: AsyncClient):
+    """PUT with invalid UUID path returns 422."""
+    response = await client.put(
+        "/api/v1/payment-methods/not-a-uuid",
+        json={"name": "Card", "currency": "INR"},
+    )
     assert response.status_code == 422

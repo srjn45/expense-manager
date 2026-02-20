@@ -1,6 +1,9 @@
 """Integration tests for GET /health."""
 
+import pytest
 from httpx import AsyncClient
+
+pytestmark = pytest.mark.integration
 
 
 async def test_health_returns_200(client: AsyncClient):

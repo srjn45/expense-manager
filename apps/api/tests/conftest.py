@@ -5,12 +5,20 @@ from collections.abc import AsyncGenerator
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.config import get_settings
 from app.deps import get_db
 from app.main import app
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """Register custom markers."""
+    config.addinivalue_line(
+        "markers",
+        "integration: mark test as integration (uses HTTP client and DB; run serially, no -n).",
+    )
 
 _settings = get_settings()
 _test_url = _settings.test_database_url or _settings.database_url
@@ -58,8 +66,30 @@ async def db_session(test_engine) -> AsyncGenerator[AsyncSession, None]:
         await connection.close()
 
 
+async def _truncate_tables_for_integration(engine) -> None:
+    """Truncate tables used by integration tests (commits so other connections see it)."""
+    async with engine.connect() as conn:
+        await conn.execute(
+            text(
+                "TRUNCATE payment_methods, categories, tag_suggestions "
+                "RESTART IDENTITY CASCADE"
+            )
+        )
+        await conn.commit()
+
+
 @pytest_asyncio.fixture
-async def client(db_session: AsyncSession):
+async def integration_cleanup(test_engine) -> AsyncGenerator[None, None]:
+    """Clean DB before and after each integration test so tests don't see each other's data."""
+    await _truncate_tables_for_integration(test_engine)
+    try:
+        yield
+    finally:
+        await _truncate_tables_for_integration(test_engine)
+
+
+@pytest_asyncio.fixture
+async def client(integration_cleanup: None, db_session: AsyncSession):
     """Async HTTP client; get_db overridden to use fixture session (transaction rolled back after test)."""
     async def _override_get_db() -> AsyncGenerator[AsyncSession, None]:
         yield db_session

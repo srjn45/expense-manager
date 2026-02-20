@@ -31,6 +31,24 @@ async def create_payment_method(
     return row
 
 
+async def update_payment_method(
+    session: AsyncSession,
+    id: uuid.UUID,
+    *,
+    name: str,
+    currency: str,
+) -> PaymentMethod | None:
+    """Update a payment method by id. Returns updated model or None if not found."""
+    row = await get_payment_method(session, id)
+    if row is None:
+        return None
+    row.name = name.strip()
+    row.currency = currency.strip()
+    await session.flush()
+    await session.refresh(row)
+    return row
+
+
 async def list_payment_methods(
     session: AsyncSession,
     *,

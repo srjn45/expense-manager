@@ -38,6 +38,10 @@ build-backend = "hatchling.build"
 asyncio_mode = "auto"
 testpaths = ["tests"]
 pythonpath = ["."]
+# Integration tests use the shared test DB; run them serially (do not use pytest-xdist -n).
+markers = [
+    "integration: mark test as integration (HTTP + DB; run serially, no -n).",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["app"]

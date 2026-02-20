@@ -6,7 +6,7 @@ import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import PaymentMethod
-from app.services.payment_method import create_payment_method, get_payment_method, list_payment_methods
+from app.services.payment_method import create_payment_method, get_payment_method, list_payment_methods, update_payment_method
 
 
 @pytest_asyncio.fixture
@@ -120,3 +120,48 @@ async def test_get_payment_method_returns_inactive_record(
     assert result is not None
     assert result.id == payment_method_inactive.id
     assert result.active is False
+
+
+async def test_update_payment_method_returns_none_when_not_found(db_session: AsyncSession):
+    """update_payment_method returns None when id does not exist."""
+    result = await update_payment_method(db_session, uuid.uuid4(), name="UPI", currency="INR")
+    assert result is None
+
+
+async def test_update_payment_method_updates_and_returns(
+    db_session: AsyncSession,
+    payment_method_active: PaymentMethod,
+):
+    """update_payment_method updates name/currency and returns the model."""
+    result = await update_payment_method(
+        db_session,
+        payment_method_active.id,
+        name="NewName",
+        currency="USD",
+    )
+    assert result is not None
+    assert result.id == payment_method_active.id
+    assert result.name == "NewName"
+    assert result.currency == "USD"
+    assert result.active is payment_method_active.active
+    # Persisted: get_payment_method sees new values
+    fetched = await get_payment_method(db_session, payment_method_active.id)
+    assert fetched is not None
+    assert fetched.name == "NewName"
+    assert fetched.currency == "USD"
+
+
+async def test_update_payment_method_strips_whitespace(
+    db_session: AsyncSession,
+    payment_method_active: PaymentMethod,
+):
+    """update_payment_method strips leading/trailing whitespace from name and currency."""
+    result = await update_payment_method(
+        db_session,
+        payment_method_active.id,
+        name="  UPI  ",
+        currency=" INR ",
+    )
+    assert result is not None
+    assert result.name == "UPI"
+    assert result.currency == "INR"

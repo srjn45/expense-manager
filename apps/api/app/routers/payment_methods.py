@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.deps import get_db
 from app.schemas.payment_method import PaymentMethodCreate, PaymentMethodResponse
-from app.services.payment_method import create_payment_method, get_payment_method, list_payment_methods
+from app.services.payment_method import create_payment_method, get_payment_method, list_payment_methods, update_payment_method
 
 router = APIRouter(prefix="/payment-methods", tags=["payment-methods"])
 
@@ -77,3 +77,30 @@ async def post_payment_method(
         content={"data": payload},
         headers={"Location": f"/api/v1/payment-methods/{row.id}"},
     )
+
+
+@router.put(
+    "/{id}",
+    response_model=dict,
+    responses={
+        200: {"description": "Payment method updated"},
+        404: {"description": "Payment method not found"},
+        422: {"description": "Validation error"},
+    },
+)
+async def put_payment_method(
+    id: uuid.UUID,
+    body: PaymentMethodCreate,
+    session: AsyncSession = Depends(get_db),
+) -> dict:
+    """Update a payment method by id."""
+    row = await update_payment_method(
+        session,
+        id,
+        name=body.name,
+        currency=body.currency,
+    )
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Payment method not found")
+    payload = PaymentMethodResponse.model_validate(row).model_dump(mode="json", by_alias=True)
+    return {"data": payload}

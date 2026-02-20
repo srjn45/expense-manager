@@ -1,12 +1,17 @@
 """SQLAlchemy declarative base and table definitions (for Alembic metadata)."""
 
 import uuid
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 
 from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Numeric, String, Text
 from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+
+def _utc_now() -> datetime:
+    """Return current time in UTC (timezone-aware). Replaces deprecated datetime.utcnow()."""
+    return datetime.now(UTC)
 
 
 class Base(DeclarativeBase):
@@ -20,8 +25,8 @@ class PaymentMethod(Base):
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     currency: Mapped[str] = mapped_column(String(10), nullable=False)
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
-    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utc_now)
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, onupdate=_utc_now)
 
 
 class Category(Base):
@@ -31,8 +36,8 @@ class Category(Base):
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     color: Mapped[str | None] = mapped_column(String(20), nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
-    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utc_now)
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, onupdate=_utc_now)
 
 
 class LedgerEntry(Base):
@@ -45,8 +50,8 @@ class LedgerEntry(Base):
     payment_method_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("payment_methods.id"), nullable=False)
     amount: Mapped[Decimal] = mapped_column(Numeric(precision=14, scale=2), nullable=False)
     tags: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utc_now, onupdate=_utc_now)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
@@ -54,4 +59,4 @@ class TagSuggestion(Base):
     __tablename__ = "tag_suggestions"
 
     tag_text: Mapped[str] = mapped_column(String(100), primary_key=True)
-    last_used_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
+    last_used_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utc_now)
