@@ -6,7 +6,7 @@ import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import PaymentMethod
-from app.services.payment_method import create_payment_method, list_payment_methods
+from app.services.payment_method import create_payment_method, get_payment_method, list_payment_methods
 
 
 @pytest_asyncio.fixture
@@ -92,3 +92,31 @@ async def test_create_payment_method_returns_active_and_persists(db_session: Asy
     await db_session.flush()
     listed = await list_payment_methods(db_session, active_only=True)
     assert any(r.id == row.id for r in listed)
+
+
+async def test_get_payment_method_returns_none_when_not_found(db_session: AsyncSession):
+    """get_payment_method returns None when id does not exist."""
+    result = await get_payment_method(db_session, uuid.uuid4())
+    assert result is None
+
+
+async def test_get_payment_method_returns_record_when_found(
+    db_session: AsyncSession,
+    payment_method_active: PaymentMethod,
+):
+    """get_payment_method returns the record when found (active or inactive)."""
+    result = await get_payment_method(db_session, payment_method_active.id)
+    assert result is not None
+    assert result.id == payment_method_active.id
+    assert result.name == payment_method_active.name
+
+
+async def test_get_payment_method_returns_inactive_record(
+    db_session: AsyncSession,
+    payment_method_inactive: PaymentMethod,
+):
+    """get_payment_method returns inactive record so historical ledger can show name."""
+    result = await get_payment_method(db_session, payment_method_inactive.id)
+    assert result is not None
+    assert result.id == payment_method_inactive.id
+    assert result.active is False

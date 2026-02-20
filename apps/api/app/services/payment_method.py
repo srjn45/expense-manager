@@ -1,9 +1,20 @@
 """Payment method service: list, get, create, update, delete."""
 
+import uuid
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import PaymentMethod
+
+
+async def get_payment_method(
+    session: AsyncSession,
+    id: uuid.UUID,
+) -> PaymentMethod | None:
+    """Return a payment method by id, or None if not found. Includes active and inactive."""
+    result = await session.execute(select(PaymentMethod).where(PaymentMethod.id == id))
+    return result.scalar_one_or_none()
 
 
 async def create_payment_method(

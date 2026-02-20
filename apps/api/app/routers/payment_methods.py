@@ -1,12 +1,14 @@
 """Payment methods API: GET list, GET one, POST, PUT, DELETE."""
 
-from fastapi import APIRouter, Depends, status
+import uuid
+
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.deps import get_db
 from app.schemas.payment_method import PaymentMethodCreate, PaymentMethodResponse
-from app.services.payment_method import create_payment_method, list_payment_methods
+from app.services.payment_method import create_payment_method, get_payment_method, list_payment_methods
 
 router = APIRouter(prefix="/payment-methods", tags=["payment-methods"])
 
@@ -27,6 +29,27 @@ async def get_payment_methods(
             for m in items
         ]
     }
+
+
+@router.get(
+    "/{id}",
+    response_model=dict,
+    responses={
+        200: {"description": "Payment method found"},
+        404: {"description": "Payment method not found"},
+        422: {"description": "Invalid UUID format"},
+    },
+)
+async def get_payment_method_by_id(
+    id: uuid.UUID,
+    session: AsyncSession = Depends(get_db),
+) -> dict:
+    """Get a single payment method by id (active or inactive)."""
+    row = await get_payment_method(session, id)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Payment method not found")
+    payload = PaymentMethodResponse.model_validate(row).model_dump(mode="json", by_alias=True)
+    return {"data": payload}
 
 
 @router.post(

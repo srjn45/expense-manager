@@ -151,3 +151,49 @@ async def test_post_payment_method_422_invalid_type_name(client: AsyncClient):
         json={"name": 123, "currency": "INR"},
     )
     assert response.status_code == 422
+
+
+# --- GET /api/v1/payment-methods/{id} (Step 3) ---
+
+
+async def test_get_payment_method_by_id_200_existing(
+    client: AsyncClient,
+    one_active_payment_method: PaymentMethod,
+):
+    """GET /payment-methods/{id} with existing id returns 200 and data with id, name, currency, active, createdAt."""
+    response = await client.get(f"/api/v1/payment-methods/{one_active_payment_method.id}")
+    assert response.status_code == 200
+    body = response.json()
+    assert "data" in body
+    data = body["data"]
+    assert data["id"] == str(one_active_payment_method.id)
+    assert data["name"] == one_active_payment_method.name
+    assert data["currency"] == one_active_payment_method.currency
+    assert data["active"] is True
+    assert "createdAt" in data
+
+
+async def test_get_payment_method_by_id_200_inactive(
+    client: AsyncClient,
+    one_inactive_payment_method: PaymentMethod,
+):
+    """GET /payment-methods/{id} returns inactive record (for historical ledger)."""
+    response = await client.get(f"/api/v1/payment-methods/{one_inactive_payment_method.id}")
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["id"] == str(one_inactive_payment_method.id)
+    assert data["active"] is False
+
+
+async def test_get_payment_method_by_id_404_not_found(client: AsyncClient):
+    """GET /payment-methods/{id} with non-existent UUID returns 404."""
+    response = await client.get(f"/api/v1/payment-methods/{uuid.uuid4()}")
+    assert response.status_code == 404
+    body = response.json()
+    assert "detail" in body
+
+
+async def test_get_payment_method_by_id_422_invalid_uuid(client: AsyncClient):
+    """GET /payment-methods/{id} with invalid UUID format returns 422."""
+    response = await client.get("/api/v1/payment-methods/not-a-uuid")
+    assert response.status_code == 422
