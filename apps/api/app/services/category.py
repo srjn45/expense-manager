@@ -1,9 +1,25 @@
-"""Category service: list (get, create, update, delete in later steps)."""
+"""Category service: list, create (get, update, delete in later steps)."""
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Category
+
+
+async def create_category(
+    session: AsyncSession,
+    *,
+    name: str,
+    color: str | None = None,
+) -> Category:
+    """Create a category; active=True by default. Persists and returns the model."""
+    row = Category(
+        name=name.strip(), color=color.strip() if color else None, active=True
+    )
+    session.add(row)
+    await session.flush()
+    await session.refresh(row)
+    return row
 
 
 async def list_categories(

@@ -6,7 +6,7 @@ import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Category
-from app.services.category import list_categories
+from app.services.category import create_category, list_categories
 
 
 @pytest_asyncio.fixture
@@ -83,3 +83,24 @@ async def test_list_categories_active_only_false_includes_inactive(
     assert category_active.id in ids
     assert category_inactive.id in ids
     assert len(result) == 2
+
+
+async def test_create_category_returns_active_and_persists(db_session: AsyncSession):
+    """create_category returns model with active=True and persists."""
+    row = await create_category(db_session, name="Food", color="#00ff00")
+    assert row.id is not None
+    assert row.name == "Food"
+    assert row.color == "#00ff00"
+    assert row.active is True
+    assert row.created_at is not None
+    await db_session.flush()
+    listed = await list_categories(db_session, active_only=True)
+    assert any(r.id == row.id for r in listed)
+
+
+async def test_create_category_without_color(db_session: AsyncSession):
+    """create_category with color=None persists and lists."""
+    row = await create_category(db_session, name="Misc")
+    assert row.color is None
+    listed = await list_categories(db_session, active_only=True)
+    assert any(r.id == row.id for r in listed)

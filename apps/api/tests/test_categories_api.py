@@ -70,3 +70,66 @@ async def test_get_categories_returns_active_only_with_correct_shape(
     assert "createdAt" in item
     ids = [x["id"] for x in body["data"]]
     assert str(one_inactive_category.id) not in ids
+
+
+# --- POST /api/v1/categories (Step 7) ---
+
+
+async def test_post_category_201_valid_with_color(client: AsyncClient):
+    """POST with name and color returns 201, Location, and data with id, name, color, active, createdAt."""
+    response = await client.post(
+        "/api/v1/categories",
+        json={"name": "Food", "color": "#ff0000"},
+    )
+    assert response.status_code == 201
+    assert response.headers.get("location", "").startswith("/api/v1/categories/")
+    body = response.json()
+    assert "data" in body
+    data = body["data"]
+    assert "id" in data
+    assert data["name"] == "Food"
+    assert data["color"] == "#ff0000"
+    assert data["active"] is True
+    assert "createdAt" in data
+
+
+async def test_post_category_201_valid_without_color(client: AsyncClient):
+    """POST with name only returns 201; color is null."""
+    response = await client.post(
+        "/api/v1/categories",
+        json={"name": "Misc"},
+    )
+    assert response.status_code == 201
+    data = response.json()["data"]
+    assert data["name"] == "Misc"
+    assert data["color"] is None
+    assert data["active"] is True
+
+
+async def test_post_category_422_missing_name(client: AsyncClient):
+    """POST without name returns 422."""
+    response = await client.post(
+        "/api/v1/categories",
+        json={"color": "#fff"},
+    )
+    assert response.status_code == 422
+    detail = response.json().get("detail", [])
+    assert any("name" in str(e.get("loc", [])) for e in detail)
+
+
+async def test_post_category_422_empty_name(client: AsyncClient):
+    """POST with empty name returns 422."""
+    response = await client.post(
+        "/api/v1/categories",
+        json={"name": ""},
+    )
+    assert response.status_code == 422
+
+
+async def test_post_category_422_invalid_type_name(client: AsyncClient):
+    """POST with name as number returns 422."""
+    response = await client.post(
+        "/api/v1/categories",
+        json={"name": 123},
+    )
+    assert response.status_code == 422
