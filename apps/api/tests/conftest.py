@@ -25,8 +25,9 @@ def sync_engine():
     engine.dispose()
 
 
-@pytest_asyncio.fixture(scope="session")
+@pytest_asyncio.fixture
 async def test_engine():
+    """Async engine for DB session; function-scoped to avoid event loop conflicts."""
     engine = create_async_engine(
         _test_url,
         echo=False,
