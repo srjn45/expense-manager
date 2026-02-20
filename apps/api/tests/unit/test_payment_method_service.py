@@ -6,7 +6,13 @@ import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import PaymentMethod
-from app.services.payment_method import create_payment_method, get_payment_method, list_payment_methods, soft_delete_payment_method, update_payment_method
+from app.services.payment_method import (
+    create_payment_method,
+    get_payment_method,
+    list_payment_methods,
+    soft_delete_payment_method,
+    update_payment_method,
+)
 
 
 @pytest_asyncio.fixture
@@ -80,7 +86,9 @@ async def test_list_payment_methods_active_only_false_includes_inactive(
     assert len(result) == 2
 
 
-async def test_create_payment_method_returns_active_and_persists(db_session: AsyncSession):
+async def test_create_payment_method_returns_active_and_persists(
+    db_session: AsyncSession,
+):
     """create_payment_method returns model with active=True and persists."""
     row = await create_payment_method(db_session, name="UPI", currency="INR")
     assert row.id is not None
@@ -122,9 +130,13 @@ async def test_get_payment_method_returns_inactive_record(
     assert result.active is False
 
 
-async def test_update_payment_method_returns_none_when_not_found(db_session: AsyncSession):
+async def test_update_payment_method_returns_none_when_not_found(
+    db_session: AsyncSession,
+):
     """update_payment_method returns None when id does not exist."""
-    result = await update_payment_method(db_session, uuid.uuid4(), name="UPI", currency="INR")
+    result = await update_payment_method(
+        db_session, uuid.uuid4(), name="UPI", currency="INR"
+    )
     assert result is None
 
 
@@ -167,7 +179,9 @@ async def test_update_payment_method_strips_whitespace(
     assert result.currency == "INR"
 
 
-async def test_soft_delete_payment_method_returns_none_when_not_found(db_session: AsyncSession):
+async def test_soft_delete_payment_method_returns_none_when_not_found(
+    db_session: AsyncSession,
+):
     """soft_delete_payment_method returns None when id does not exist."""
     result = await soft_delete_payment_method(db_session, uuid.uuid4())
     assert result is None

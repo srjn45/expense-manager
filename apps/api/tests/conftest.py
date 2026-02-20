@@ -20,6 +20,7 @@ def pytest_configure(config: pytest.Config) -> None:
         "integration: mark test as integration (uses HTTP client and DB; run serially, no -n).",
     )
 
+
 _settings = get_settings()
 _test_url = _settings.test_database_url or _settings.database_url
 _test_sync_url = _test_url.replace("postgresql+asyncpg://", "postgresql://", 1)
@@ -91,6 +92,7 @@ async def integration_cleanup(test_engine) -> AsyncGenerator[None, None]:
 @pytest_asyncio.fixture
 async def client(integration_cleanup: None, db_session: AsyncSession):
     """Async HTTP client; get_db overridden to use fixture session (transaction rolled back after test)."""
+
     async def _override_get_db() -> AsyncGenerator[AsyncSession, None]:
         yield db_session
 

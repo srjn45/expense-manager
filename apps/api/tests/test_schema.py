@@ -38,42 +38,59 @@ def test_all_tables_exist(sync_engine):
     inspector = inspect(sync_engine)
     tables = set(inspector.get_table_names())
     for expected in EXPECTED_TABLES:
-        assert expected in tables, f"Table {expected!r} not found. Got: {sorted(tables)}"
+        assert expected in tables, (
+            f"Table {expected!r} not found. Got: {sorted(tables)}"
+        )
 
 
 def test_payment_methods_columns(sync_engine):
     """payment_methods has expected columns."""
     inspector = inspect(sync_engine)
     columns = {c["name"] for c in inspector.get_columns("payment_methods")}
-    assert columns == EXPECTED_TABLES["payment_methods"], f"payment_methods: expected {EXPECTED_TABLES['payment_methods']}, got {columns}"
+    assert columns == EXPECTED_TABLES["payment_methods"], (
+        f"payment_methods: expected {EXPECTED_TABLES['payment_methods']}, got {columns}"
+    )
 
 
 def test_categories_columns(sync_engine):
     """categories has expected columns."""
     inspector = inspect(sync_engine)
     columns = {c["name"] for c in inspector.get_columns("categories")}
-    assert columns == EXPECTED_TABLES["categories"], f"categories: expected {EXPECTED_TABLES['categories']}, got {columns}"
+    assert columns == EXPECTED_TABLES["categories"], (
+        f"categories: expected {EXPECTED_TABLES['categories']}, got {columns}"
+    )
 
 
 def test_ledger_entries_columns(sync_engine):
     """ledger_entries has expected columns."""
     inspector = inspect(sync_engine)
     columns = {c["name"] for c in inspector.get_columns("ledger_entries")}
-    assert columns == EXPECTED_TABLES["ledger_entries"], f"ledger_entries: expected {EXPECTED_TABLES['ledger_entries']}, got {columns}"
+    assert columns == EXPECTED_TABLES["ledger_entries"], (
+        f"ledger_entries: expected {EXPECTED_TABLES['ledger_entries']}, got {columns}"
+    )
 
 
 def test_tag_suggestions_columns(sync_engine):
     """tag_suggestions has expected columns."""
     inspector = inspect(sync_engine)
     columns = {c["name"] for c in inspector.get_columns("tag_suggestions")}
-    assert columns == EXPECTED_TABLES["tag_suggestions"], f"tag_suggestions: expected {EXPECTED_TABLES['tag_suggestions']}, got {columns}"
+    assert columns == EXPECTED_TABLES["tag_suggestions"], (
+        f"tag_suggestions: expected {EXPECTED_TABLES['tag_suggestions']}, got {columns}"
+    )
 
 
 def test_ledger_entries_indexes(sync_engine):
     """ledger_entries has expected indexes for listing and filtering."""
     inspector = inspect(sync_engine)
-    indexes = {idx["name"]: set(idx["column_names"]) for idx in inspector.get_indexes("ledger_entries")}
+    indexes = {
+        idx["name"]: set(idx["column_names"])
+        for idx in inspector.get_indexes("ledger_entries")
+    }
     for index_name, expected_cols in EXPECTED_LEDGER_INDEXES.items():
-        assert index_name in indexes, f"Index {index_name!r} not found. Got: {list(indexes)}"
+        assert index_name in indexes, (
+            f"Index {index_name!r} not found. Got: {list(indexes)}"
+        )
         actual = indexes[index_name]
-        assert actual == expected_cols, f"Index {index_name}: expected columns {expected_cols}, got {actual}"
+        assert actual == expected_cols, (
+            f"Index {index_name}: expected columns {expected_cols}, got {actual}"
+        )

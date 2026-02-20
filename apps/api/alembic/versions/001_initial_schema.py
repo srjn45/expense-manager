@@ -5,6 +5,7 @@ Revises:
 Create Date: 2026-02-20
 
 """
+
 from typing import Sequence, Union
 
 from alembic import op
@@ -50,13 +51,19 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
-        sa.ForeignKeyConstraint(["category_id"], ["categories.id"], ondelete="RESTRICT"),
-        sa.ForeignKeyConstraint(["payment_method_id"], ["payment_methods.id"], ondelete="RESTRICT"),
+        sa.ForeignKeyConstraint(
+            ["category_id"], ["categories.id"], ondelete="RESTRICT"
+        ),
+        sa.ForeignKeyConstraint(
+            ["payment_method_id"], ["payment_methods.id"], ondelete="RESTRICT"
+        ),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index("ix_ledger_entries_date_id", "ledger_entries", ["date", "id"])
     op.create_index("ix_ledger_entries_category_id", "ledger_entries", ["category_id"])
-    op.create_index("ix_ledger_entries_payment_method_id", "ledger_entries", ["payment_method_id"])
+    op.create_index(
+        "ix_ledger_entries_payment_method_id", "ledger_entries", ["payment_method_id"]
+    )
     op.create_table(
         "tag_suggestions",
         sa.Column("tag_text", sa.String(length=100), nullable=False),

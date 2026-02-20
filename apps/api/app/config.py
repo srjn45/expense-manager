@@ -10,7 +10,9 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/expense_manager"
+    database_url: str = (
+        "postgresql+asyncpg://postgres:postgres@localhost:5432/expense_manager"
+    )
     test_database_url: str | None = None
 
     @property

@@ -41,7 +41,9 @@ async def one_inactive_payment_method(db_session: AsyncSession) -> PaymentMethod
     return row
 
 
-async def test_get_payment_methods_empty_returns_200_and_empty_data(client: AsyncClient):
+async def test_get_payment_methods_empty_returns_200_and_empty_data(
+    client: AsyncClient,
+):
     """GET /api/v1/payment-methods with no data returns 200 and data: []."""
     response = await client.get("/api/v1/payment-methods")
     assert response.status_code == 200
@@ -164,7 +166,9 @@ async def test_get_payment_method_by_id_200_existing(
     one_active_payment_method: PaymentMethod,
 ):
     """GET /payment-methods/{id} with existing id returns 200 and data with id, name, currency, active, createdAt."""
-    response = await client.get(f"/api/v1/payment-methods/{one_active_payment_method.id}")
+    response = await client.get(
+        f"/api/v1/payment-methods/{one_active_payment_method.id}"
+    )
     assert response.status_code == 200
     body = response.json()
     assert "data" in body
@@ -181,7 +185,9 @@ async def test_get_payment_method_by_id_200_inactive(
     one_inactive_payment_method: PaymentMethod,
 ):
     """GET /payment-methods/{id} returns inactive record (for historical ledger)."""
-    response = await client.get(f"/api/v1/payment-methods/{one_inactive_payment_method.id}")
+    response = await client.get(
+        f"/api/v1/payment-methods/{one_inactive_payment_method.id}"
+    )
     assert response.status_code == 200
     data = response.json()["data"]
     assert data["id"] == str(one_inactive_payment_method.id)
@@ -224,7 +230,9 @@ async def test_put_payment_method_200_valid_body(
     assert data["active"] is True
     assert "createdAt" in data
     # GET same id returns updated values
-    get_resp = await client.get(f"/api/v1/payment-methods/{one_active_payment_method.id}")
+    get_resp = await client.get(
+        f"/api/v1/payment-methods/{one_active_payment_method.id}"
+    )
     assert get_resp.status_code == 200
     assert get_resp.json()["data"]["name"] == "CardUpdated"
     assert get_resp.json()["data"]["currency"] == "USD"
@@ -317,7 +325,9 @@ async def test_delete_payment_method_200_soft_deletes(
     one_active_payment_method: PaymentMethod,
 ):
     """DELETE with existing id returns 200 and data with active=false; GET same id still returns record with active false."""
-    response = await client.delete(f"/api/v1/payment-methods/{one_active_payment_method.id}")
+    response = await client.delete(
+        f"/api/v1/payment-methods/{one_active_payment_method.id}"
+    )
     assert response.status_code == 200
     body = response.json()
     assert "data" in body
@@ -325,7 +335,9 @@ async def test_delete_payment_method_200_soft_deletes(
     assert data["id"] == str(one_active_payment_method.id)
     assert data["active"] is False
     # GET same id still returns record with active: false
-    get_resp = await client.get(f"/api/v1/payment-methods/{one_active_payment_method.id}")
+    get_resp = await client.get(
+        f"/api/v1/payment-methods/{one_active_payment_method.id}"
+    )
     assert get_resp.status_code == 200
     assert get_resp.json()["data"]["active"] is False
 
