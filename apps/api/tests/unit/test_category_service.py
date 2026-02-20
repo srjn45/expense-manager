@@ -6,7 +6,12 @@ import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Category
-from app.services.category import create_category, get_category, list_categories
+from app.services.category import (
+    create_category,
+    get_category,
+    list_categories,
+    update_category,
+)
 
 
 @pytest_asyncio.fixture
@@ -132,3 +137,47 @@ async def test_get_category_returns_inactive_record(
     assert result is not None
     assert result.id == category_inactive.id
     assert result.active is False
+
+
+async def test_update_category_returns_none_when_not_found(db_session: AsyncSession):
+    """update_category returns None when id does not exist."""
+    result = await update_category(db_session, uuid.uuid4(), name="Food", color="#fff")
+    assert result is None
+
+
+async def test_update_category_updates_and_returns(
+    db_session: AsyncSession,
+    category_active: Category,
+):
+    """update_category updates name/color and returns the model."""
+    result = await update_category(
+        db_session,
+        category_active.id,
+        name="NewName",
+        color="#000000",
+    )
+    assert result is not None
+    assert result.id == category_active.id
+    assert result.name == "NewName"
+    assert result.color == "#000000"
+    assert result.active is category_active.active
+    fetched = await get_category(db_session, category_active.id)
+    assert fetched is not None
+    assert fetched.name == "NewName"
+    assert fetched.color == "#000000"
+
+
+async def test_update_category_strips_whitespace(
+    db_session: AsyncSession,
+    category_active: Category,
+):
+    """update_category strips leading/trailing whitespace from name and color."""
+    result = await update_category(
+        db_session,
+        category_active.id,
+        name="  Food  ",
+        color=" #abc ",
+    )
+    assert result is not None
+    assert result.name == "Food"
+    assert result.color == "#abc"

@@ -8,7 +8,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.deps import get_db
 from app.schemas.category import CategoryCreate, CategoryResponse
-from app.services.category import create_category, get_category, list_categories
+from app.services.category import (
+    create_category,
+    get_category,
+    list_categories,
+    update_category,
+)
 
 router = APIRouter(prefix="/categories", tags=["categories"])
 
@@ -57,6 +62,37 @@ async def get_category_by_id(
 ) -> dict:
     """Get a single category by id (active or inactive)."""
     row = await get_category(session, id)
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Category not found"
+        )
+    payload = CategoryResponse.model_validate(row).model_dump(
+        mode="json", by_alias=True
+    )
+    return {"data": payload}
+
+
+@router.put(
+    "/{id}",
+    response_model=dict,
+    responses={
+        200: {"description": "Category updated"},
+        404: {"description": "Category not found"},
+        422: {"description": "Validation error"},
+    },
+)
+async def put_category(
+    id: uuid.UUID,
+    body: CategoryCreate,
+    session: AsyncSession = Depends(get_db),
+) -> dict:
+    """Update a category by id."""
+    row = await update_category(
+        session,
+        id,
+        name=body.name,
+        color=body.color,
+    )
     if row is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Category not found"

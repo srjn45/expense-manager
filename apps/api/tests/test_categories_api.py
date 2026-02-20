@@ -179,3 +179,85 @@ async def test_get_category_by_id_422_invalid_uuid(client: AsyncClient):
     """GET /categories/{id} with invalid UUID format returns 422."""
     response = await client.get("/api/v1/categories/not-a-uuid")
     assert response.status_code == 422
+
+
+# --- PUT /api/v1/categories/{id} (Step 9) ---
+
+
+async def test_put_category_200_valid(
+    client: AsyncClient,
+    one_active_category: Category,
+):
+    """PUT with valid body and existing id returns 200 and data with updated values."""
+    response = await client.put(
+        f"/api/v1/categories/{one_active_category.id}",
+        json={"name": "FoodUpdated", "color": "#111111"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert "data" in body
+    data = body["data"]
+    assert data["id"] == str(one_active_category.id)
+    assert data["name"] == "FoodUpdated"
+    assert data["color"] == "#111111"
+    assert data["active"] is True
+    assert "createdAt" in data
+    get_resp = await client.get(f"/api/v1/categories/{one_active_category.id}")
+    assert get_resp.status_code == 200
+    assert get_resp.json()["data"]["name"] == "FoodUpdated"
+    assert get_resp.json()["data"]["color"] == "#111111"
+
+
+async def test_put_category_404_not_found(client: AsyncClient):
+    """PUT with non-existent id returns 404."""
+    response = await client.put(
+        f"/api/v1/categories/{uuid.uuid4()}",
+        json={"name": "X", "color": None},
+    )
+    assert response.status_code == 404
+    assert "detail" in response.json()
+
+
+async def test_put_category_422_missing_name(
+    client: AsyncClient,
+    one_active_category: Category,
+):
+    """PUT without name returns 422."""
+    response = await client.put(
+        f"/api/v1/categories/{one_active_category.id}",
+        json={"color": "#fff"},
+    )
+    assert response.status_code == 422
+
+
+async def test_put_category_422_empty_name(
+    client: AsyncClient,
+    one_active_category: Category,
+):
+    """PUT with empty name returns 422."""
+    response = await client.put(
+        f"/api/v1/categories/{one_active_category.id}",
+        json={"name": ""},
+    )
+    assert response.status_code == 422
+
+
+async def test_put_category_422_invalid_type_name(
+    client: AsyncClient,
+    one_active_category: Category,
+):
+    """PUT with name as number returns 422."""
+    response = await client.put(
+        f"/api/v1/categories/{one_active_category.id}",
+        json={"name": 123},
+    )
+    assert response.status_code == 422
+
+
+async def test_put_category_422_invalid_uuid(client: AsyncClient):
+    """PUT with invalid UUID path returns 422."""
+    response = await client.put(
+        "/api/v1/categories/not-a-uuid",
+        json={"name": "Food", "color": "#fff"},
+    )
+    assert response.status_code == 422

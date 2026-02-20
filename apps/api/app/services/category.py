@@ -33,6 +33,24 @@ async def create_category(
     return row
 
 
+async def update_category(
+    session: AsyncSession,
+    id: uuid.UUID,
+    *,
+    name: str,
+    color: str | None = None,
+) -> Category | None:
+    """Update a category by id. Returns updated model or None if not found."""
+    row = await get_category(session, id)
+    if row is None:
+        return None
+    row.name = name.strip()
+    row.color = color.strip() if color else None
+    await session.flush()
+    await session.refresh(row)
+    return row
+
+
 async def list_categories(
     session: AsyncSession,
     *,
