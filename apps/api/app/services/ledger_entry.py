@@ -1,12 +1,15 @@
-"""Ledger entry service: create (list, get, update, delete in later steps)."""
+"""Ledger entry service: create, list (get, update, delete in later steps)."""
 
+import base64
+import json
 from datetime import date
 from decimal import Decimal
 from uuid import UUID
 
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import LedgerEntry
+from app.models import Category, LedgerEntry, PaymentMethod
 from app.services import category as category_service
 from app.services import payment_method as payment_method_service
 from app.services import tag_suggestion as tag_suggestion_service
@@ -67,3 +70,79 @@ async def create_ledger_entry(
         payment_method.name,
         payment_method.currency,
     )
+
+
+def _encode_cursor(entry_date: date, entry_id: UUID) -> str:
+    """Encode (date, id) into an opaque cursor string."""
+    payload = {"d": str(entry_date), "i": str(entry_id)}
+    return base64.urlsafe_b64encode(json.dumps(payload).encode()).decode()
+
+
+def _decode_cursor(cursor: str) -> tuple[date, UUID] | None:
+    """Decode cursor to (date, id). Returns None if invalid."""
+    try:
+        raw = base64.urlsafe_b64decode(cursor.encode())
+        data = json.loads(raw.decode())
+        return date.fromisoformat(data["d"]), UUID(data["i"])
+    except (ValueError, KeyError, TypeError):
+        return None
+
+
+async def list_ledger_entries(
+    session: AsyncSession,
+    *,
+    cursor: str | None = None,
+    limit: int = 50,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    category_id: UUID | None = None,
+    payment_method_id: UUID | None = None,
+    type_: str | None = None,
+    tags: list[str] | None = None,
+) -> tuple[list[tuple[LedgerEntry, str, str, str]], str | None]:
+    """List ledger entries (excl. soft-deleted), cursor-paginated, date desc, id desc.
+    Returns ((entry, category_name, payment_method_name, currency), ...), next_cursor.
+    type_: 'expense' = amount < 0, 'refund' = amount > 0. tags: entries must contain all (AND).
+    Invalid cursor is ignored (first page returned).
+    """
+    q = (
+        select(LedgerEntry, Category.name, PaymentMethod.name, PaymentMethod.currency)
+        .select_from(LedgerEntry)
+        .join(Category, LedgerEntry.category_id == Category.id)
+        .join(PaymentMethod, LedgerEntry.payment_method_id == PaymentMethod.id)
+        .where(LedgerEntry.deleted_at.is_(None))
+    )
+    if date_from is not None:
+        q = q.where(LedgerEntry.date >= date_from)
+    if date_to is not None:
+        q = q.where(LedgerEntry.date <= date_to)
+    if category_id is not None:
+        q = q.where(LedgerEntry.category_id == category_id)
+    if payment_method_id is not None:
+        q = q.where(LedgerEntry.payment_method_id == payment_method_id)
+    if type_ == "expense":
+        q = q.where(LedgerEntry.amount < 0)
+    elif type_ == "refund":
+        q = q.where(LedgerEntry.amount > 0)
+    if tags:
+        q = q.where(LedgerEntry.tags.contains(tags))
+    if cursor:
+        decoded = _decode_cursor(cursor)
+        if decoded is not None:
+            cursor_date, cursor_id = decoded
+            q = q.where(
+                and_(
+                    (LedgerEntry.date < cursor_date)
+                    | ((LedgerEntry.date == cursor_date) & (LedgerEntry.id < cursor_id))
+                )
+            )
+    q = q.order_by(LedgerEntry.date.desc(), LedgerEntry.id.desc()).limit(limit + 1)
+    result = await session.execute(q)
+    rows = result.all()
+    next_cursor: str | None = None
+    if len(rows) > limit:
+        last_returned = rows[limit - 1]
+        next_cursor = _encode_cursor(last_returned[0].date, last_returned[0].id)
+        rows = rows[:limit]
+    out = [(r[0], r[1], r[2], r[3]) for r in rows]
+    return out, next_cursor

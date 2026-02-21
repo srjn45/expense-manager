@@ -78,3 +78,12 @@ class LedgerEntryResponse(BaseModel):
     tags: list[str]
     created_at: datetime = Field(serialization_alias="createdAt")
     updated_at: datetime = Field(serialization_alias="updatedAt")
+
+
+class LedgerEntryListResponse(BaseModel):
+    """Response shape for paginated list of ledger entries."""
+
+    model_config = ConfigDict()
+
+    data: list[LedgerEntryResponse]
+    nextCursor: str | None = Field(serialization_alias="nextCursor")

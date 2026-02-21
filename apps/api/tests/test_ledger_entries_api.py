@@ -1,4 +1,4 @@
-"""Integration tests for POST /api/v1/ledger-entries."""
+"""Integration tests for POST and GET /api/v1/ledger-entries."""
 
 import uuid
 
@@ -62,6 +62,34 @@ async def one_inactive_payment_method(db_session: AsyncSession) -> PaymentMethod
         name="OldCard",
         currency="USD",
         active=False,
+    )
+    db_session.add(row)
+    await db_session.flush()
+    return row
+
+
+@pytest_asyncio.fixture
+async def one_second_category(db_session: AsyncSession) -> Category:
+    """Second active category for filter tests."""
+    row = Category(
+        id=uuid.uuid4(),
+        name="Travel",
+        color="#0000ff",
+        active=True,
+    )
+    db_session.add(row)
+    await db_session.flush()
+    return row
+
+
+@pytest_asyncio.fixture
+async def one_second_payment_method(db_session: AsyncSession) -> PaymentMethod:
+    """Second active payment method for filter tests."""
+    row = PaymentMethod(
+        id=uuid.uuid4(),
+        name="Card",
+        currency="INR",
+        active=True,
     )
     db_session.add(row)
     await db_session.flush()
@@ -278,3 +306,304 @@ async def test_post_ledger_entry_404_payment_method_inactive(
     assert response.status_code == 404
     assert "detail" in response.json()
     assert "Payment method" in response.json()["detail"]
+
+
+# --- GET /api/v1/ledger-entries (list) ---
+
+
+async def test_get_ledger_entries_200_empty(client: AsyncClient):
+    """GET with no entries returns 200, data: [], nextCursor: null."""
+    response = await client.get("/api/v1/ledger-entries")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["data"] == []
+    assert body["nextCursor"] is None
+
+
+async def test_get_ledger_entries_200_one_page_shape_and_sort(
+    client: AsyncClient,
+    one_active_category: Category,
+    one_active_payment_method: PaymentMethod,
+):
+    """GET returns one page with correct shape; sort order date desc."""
+    await client.post(
+        "/api/v1/ledger-entries",
+        json={
+            **_valid_payload(
+                category_id=one_active_category.id,
+                payment_method_id=one_active_payment_method.id,
+            ),
+            "date": "2025-01-10",
+            "description": "First",
+        },
+    )
+    await client.post(
+        "/api/v1/ledger-entries",
+        json={
+            **_valid_payload(
+                category_id=one_active_category.id,
+                payment_method_id=one_active_payment_method.id,
+            ),
+            "date": "2025-01-15",
+            "description": "Second",
+        },
+    )
+    response = await client.get("/api/v1/ledger-entries")
+    assert response.status_code == 200
+    body = response.json()
+    assert "data" in body
+    assert len(body["data"]) == 2
+    assert body["data"][0]["date"] == "2025-01-15"
+    assert body["data"][0]["description"] == "Second"
+    assert body["data"][1]["date"] == "2025-01-10"
+    assert body["data"][1]["description"] == "First"
+    assert body["nextCursor"] is None
+    item = body["data"][0]
+    assert "id" in item
+    assert "categoryId" in item
+    assert item["categoryName"] == "Food"
+    assert "paymentMethodId" in item
+    assert item["paymentMethodName"] == "Cash"
+    assert item["currency"] == "INR"
+    assert "amount" in item
+    assert "tags" in item
+    assert "createdAt" in item
+    assert "updatedAt" in item
+
+
+async def test_get_ledger_entries_200_second_page_no_duplicates(
+    client: AsyncClient,
+    one_active_category: Category,
+    one_active_payment_method: PaymentMethod,
+):
+    """GET with cursor returns next page; no duplicate entries."""
+    for i in range(3):
+        await client.post(
+            "/api/v1/ledger-entries",
+            json={
+                **_valid_payload(
+                    category_id=one_active_category.id,
+                    payment_method_id=one_active_payment_method.id,
+                ),
+                "date": "2025-01-15",
+                "description": f"Entry {i}",
+            },
+        )
+    response = await client.get("/api/v1/ledger-entries?limit=2")
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body["data"]) == 2
+    assert body["nextCursor"] is not None
+    cursor = body["nextCursor"]
+    response2 = await client.get(f"/api/v1/ledger-entries?limit=2&cursor={cursor}")
+    assert response2.status_code == 200
+    body2 = response2.json()
+    assert len(body2["data"]) == 1
+    assert body2["nextCursor"] is None
+    ids1 = {e["id"] for e in body["data"]}
+    ids2 = {e["id"] for e in body2["data"]}
+    assert ids1.isdisjoint(ids2)
+
+
+async def test_get_ledger_entries_200_filter_date_from_to(
+    client: AsyncClient,
+    one_active_category: Category,
+    one_active_payment_method: PaymentMethod,
+):
+    """GET with dateFrom and dateTo returns only entries in range."""
+    await client.post(
+        "/api/v1/ledger-entries",
+        json={
+            **_valid_payload(
+                category_id=one_active_category.id,
+                payment_method_id=one_active_payment_method.id,
+            ),
+            "date": "2025-01-05",
+            "description": "Before",
+        },
+    )
+    await client.post(
+        "/api/v1/ledger-entries",
+        json={
+            **_valid_payload(
+                category_id=one_active_category.id,
+                payment_method_id=one_active_payment_method.id,
+            ),
+            "date": "2025-01-15",
+            "description": "In range",
+        },
+    )
+    await client.post(
+        "/api/v1/ledger-entries",
+        json={
+            **_valid_payload(
+                category_id=one_active_category.id,
+                payment_method_id=one_active_payment_method.id,
+            ),
+            "date": "2025-01-25",
+            "description": "After",
+        },
+    )
+    response = await client.get(
+        "/api/v1/ledger-entries?dateFrom=2025-01-10&dateTo=2025-01-20"
+    )
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert len(data) == 1
+    assert data[0]["description"] == "In range"
+
+
+async def test_get_ledger_entries_200_filter_category_id(
+    client: AsyncClient,
+    one_active_category: Category,
+    one_second_category: Category,
+    one_active_payment_method: PaymentMethod,
+):
+    """GET with categoryId returns only entries in that category."""
+    await client.post(
+        "/api/v1/ledger-entries",
+        json={
+            **_valid_payload(
+                category_id=one_active_category.id,
+                payment_method_id=one_active_payment_method.id,
+            ),
+            "description": "Food entry",
+        },
+    )
+    await client.post(
+        "/api/v1/ledger-entries",
+        json={
+            **_valid_payload(
+                category_id=one_second_category.id,
+                payment_method_id=one_active_payment_method.id,
+            ),
+            "description": "Travel entry",
+        },
+    )
+    response = await client.get(
+        f"/api/v1/ledger-entries?categoryId={one_active_category.id}"
+    )
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert len(data) == 1
+    assert data[0]["description"] == "Food entry"
+
+
+async def test_get_ledger_entries_200_filter_payment_method_id(
+    client: AsyncClient,
+    one_active_category: Category,
+    one_active_payment_method: PaymentMethod,
+    one_second_payment_method: PaymentMethod,
+):
+    """GET with paymentMethodId returns only entries for that payment method."""
+    await client.post(
+        "/api/v1/ledger-entries",
+        json={
+            **_valid_payload(
+                category_id=one_active_category.id,
+                payment_method_id=one_active_payment_method.id,
+            ),
+            "description": "Cash entry",
+        },
+    )
+    await client.post(
+        "/api/v1/ledger-entries",
+        json={
+            **_valid_payload(
+                category_id=one_active_category.id,
+                payment_method_id=one_second_payment_method.id,
+            ),
+            "description": "Card entry",
+        },
+    )
+    response = await client.get(
+        f"/api/v1/ledger-entries?paymentMethodId={one_active_payment_method.id}"
+    )
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert len(data) == 1
+    assert data[0]["description"] == "Cash entry"
+
+
+async def test_get_ledger_entries_200_filter_type(
+    client: AsyncClient,
+    one_active_category: Category,
+    one_active_payment_method: PaymentMethod,
+):
+    """GET with type=expense returns only negative amounts."""
+    await client.post(
+        "/api/v1/ledger-entries",
+        json={
+            **_valid_payload(
+                category_id=one_active_category.id,
+                payment_method_id=one_active_payment_method.id,
+            ),
+            "amount": "-10.00",
+            "description": "Expense",
+        },
+    )
+    await client.post(
+        "/api/v1/ledger-entries",
+        json={
+            **_valid_payload(
+                category_id=one_active_category.id,
+                payment_method_id=one_active_payment_method.id,
+            ),
+            "amount": "5.00",
+            "description": "Refund",
+        },
+    )
+    response = await client.get("/api/v1/ledger-entries?type=expense")
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert len(data) == 1
+    assert data[0]["description"] == "Expense"
+
+
+async def test_get_ledger_entries_200_filter_tags(
+    client: AsyncClient,
+    one_active_category: Category,
+    one_active_payment_method: PaymentMethod,
+):
+    """GET with tags (comma-separated) returns entries containing all tags (AND)."""
+    await client.post(
+        "/api/v1/ledger-entries",
+        json={
+            **_valid_payload(
+                category_id=one_active_category.id,
+                payment_method_id=one_active_payment_method.id,
+                tags=["a", "b"],
+            ),
+            "description": "Both tags",
+        },
+    )
+    await client.post(
+        "/api/v1/ledger-entries",
+        json={
+            **_valid_payload(
+                category_id=one_active_category.id,
+                payment_method_id=one_active_payment_method.id,
+                tags=["a"],
+            ),
+            "description": "Only A",
+        },
+    )
+    response = await client.get("/api/v1/ledger-entries?tags=a,b")
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert len(data) == 1
+    assert data[0]["description"] == "Both tags"
+
+
+async def test_get_ledger_entries_422_invalid_limit(client: AsyncClient):
+    """GET with limit=0 or limit=101 returns 422."""
+    r0 = await client.get("/api/v1/ledger-entries?limit=0")
+    assert r0.status_code == 422
+    r1 = await client.get("/api/v1/ledger-entries?limit=101")
+    assert r1.status_code == 422
+
+
+async def test_get_ledger_entries_422_invalid_date_format(client: AsyncClient):
+    """GET with invalid dateFrom/dateTo returns 422."""
+    r = await client.get("/api/v1/ledger-entries?dateFrom=not-a-date")
+    assert r.status_code == 422

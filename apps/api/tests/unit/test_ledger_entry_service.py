@@ -1,6 +1,6 @@
-"""Unit tests for ledger entry service: create_ledger_entry."""
+"""Unit tests for ledger entry service: create_ledger_entry, list_ledger_entries."""
 
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from uuid import uuid4
 
@@ -9,7 +9,11 @@ import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Category, PaymentMethod
-from app.services.ledger_entry import LedgerEntryError, create_ledger_entry
+from app.services.ledger_entry import (
+    LedgerEntryError,
+    create_ledger_entry,
+    list_ledger_entries,
+)
 from app.services.tag_suggestion import get_tag_suggestions
 
 
@@ -167,3 +171,239 @@ async def test_create_ledger_entry_payment_method_inactive(
             amount=Decimal("1"),
         )
     assert "Payment method" in exc_info.value.message
+
+
+# --- list_ledger_entries ---
+
+
+async def test_list_ledger_entries_empty(
+    db_session: AsyncSession,
+):
+    """list_ledger_entries with no data returns empty list and nextCursor None."""
+    rows, next_cursor = await list_ledger_entries(db_session, limit=50)
+    assert rows == []
+    assert next_cursor is None
+
+
+async def test_list_ledger_entries_one_page_sort_date_desc(
+    db_session: AsyncSession,
+    active_category: Category,
+    active_payment_method: PaymentMethod,
+):
+    """list_ledger_entries returns entries ordered by date desc, id desc."""
+    await create_ledger_entry(
+        db_session,
+        date_=date(2025, 1, 10),
+        description="First",
+        category_id=active_category.id,
+        payment_method_id=active_payment_method.id,
+        amount=Decimal("-5"),
+    )
+    await create_ledger_entry(
+        db_session,
+        date_=date(2025, 1, 15),
+        description="Second",
+        category_id=active_category.id,
+        payment_method_id=active_payment_method.id,
+        amount=Decimal("-10"),
+    )
+    await db_session.flush()
+    rows, next_cursor = await list_ledger_entries(db_session, limit=10)
+    assert len(rows) == 2
+    assert next_cursor is None
+    assert rows[0][0].date == date(2025, 1, 15)
+    assert rows[0][0].description == "Second"
+    assert rows[1][0].date == date(2025, 1, 10)
+    assert rows[1][0].description == "First"
+
+
+async def test_list_ledger_entries_limit_and_next_cursor(
+    db_session: AsyncSession,
+    active_category: Category,
+    active_payment_method: PaymentMethod,
+):
+    """list_ledger_entries enforces limit and returns nextCursor when more results exist."""
+    for i in range(3):
+        await create_ledger_entry(
+            db_session,
+            date_=date(2025, 1, 15),
+            description=f"Entry {i}",
+            category_id=active_category.id,
+            payment_method_id=active_payment_method.id,
+            amount=Decimal("-1"),
+        )
+    await db_session.flush()
+    rows, next_cursor = await list_ledger_entries(db_session, limit=2)
+    assert len(rows) == 2
+    assert next_cursor is not None
+    # Second page
+    rows2, next_cursor2 = await list_ledger_entries(
+        db_session, cursor=next_cursor, limit=2
+    )
+    assert len(rows2) == 1
+    assert next_cursor2 is None
+    ids_page1 = {r[0].id for r in rows}
+    ids_page2 = {r[0].id for r in rows2}
+    assert ids_page1.isdisjoint(ids_page2)
+
+
+async def test_list_ledger_entries_excludes_deleted(
+    db_session: AsyncSession,
+    active_category: Category,
+    active_payment_method: PaymentMethod,
+):
+    """list_ledger_entries excludes entries with deleted_at set."""
+    entry, _, _, _ = await create_ledger_entry(
+        db_session,
+        date_=date(2025, 1, 15),
+        description="To delete",
+        category_id=active_category.id,
+        payment_method_id=active_payment_method.id,
+        amount=Decimal("-1"),
+    )
+    await db_session.flush()
+    entry.deleted_at = datetime.now(UTC)
+    await db_session.flush()
+    rows, _ = await list_ledger_entries(db_session, limit=50)
+    assert len(rows) == 0
+
+
+async def test_list_ledger_entries_filter_date_range(
+    db_session: AsyncSession,
+    active_category: Category,
+    active_payment_method: PaymentMethod,
+):
+    """list_ledger_entries filters by dateFrom and dateTo."""
+    await create_ledger_entry(
+        db_session,
+        date_=date(2025, 1, 5),
+        description="Before",
+        category_id=active_category.id,
+        payment_method_id=active_payment_method.id,
+        amount=Decimal("-1"),
+    )
+    await create_ledger_entry(
+        db_session,
+        date_=date(2025, 1, 15),
+        description="In range",
+        category_id=active_category.id,
+        payment_method_id=active_payment_method.id,
+        amount=Decimal("-1"),
+    )
+    await create_ledger_entry(
+        db_session,
+        date_=date(2025, 1, 25),
+        description="After",
+        category_id=active_category.id,
+        payment_method_id=active_payment_method.id,
+        amount=Decimal("-1"),
+    )
+    await db_session.flush()
+    rows, _ = await list_ledger_entries(
+        db_session,
+        date_from=date(2025, 1, 10),
+        date_to=date(2025, 1, 20),
+        limit=50,
+    )
+    assert len(rows) == 1
+    assert rows[0][0].description == "In range"
+
+
+async def test_list_ledger_entries_filter_type_expense(
+    db_session: AsyncSession,
+    active_category: Category,
+    active_payment_method: PaymentMethod,
+):
+    """list_ledger_entries type=expense returns only negative amounts."""
+    await create_ledger_entry(
+        db_session,
+        date_=date(2025, 1, 15),
+        description="Expense",
+        category_id=active_category.id,
+        payment_method_id=active_payment_method.id,
+        amount=Decimal("-10"),
+    )
+    await create_ledger_entry(
+        db_session,
+        date_=date(2025, 1, 15),
+        description="Refund",
+        category_id=active_category.id,
+        payment_method_id=active_payment_method.id,
+        amount=Decimal("5"),
+    )
+    await db_session.flush()
+    rows, _ = await list_ledger_entries(db_session, type_="expense", limit=50)
+    assert len(rows) == 1
+    assert rows[0][0].amount < 0
+
+
+async def test_list_ledger_entries_filter_type_refund(
+    db_session: AsyncSession,
+    active_category: Category,
+    active_payment_method: PaymentMethod,
+):
+    """list_ledger_entries type=refund returns only positive amounts."""
+    await create_ledger_entry(
+        db_session,
+        date_=date(2025, 1, 15),
+        description="Refund",
+        category_id=active_category.id,
+        payment_method_id=active_payment_method.id,
+        amount=Decimal("5"),
+    )
+    await db_session.flush()
+    rows, _ = await list_ledger_entries(db_session, type_="refund", limit=50)
+    assert len(rows) == 1
+    assert rows[0][0].amount > 0
+
+
+async def test_list_ledger_entries_filter_tags_and(
+    db_session: AsyncSession,
+    active_category: Category,
+    active_payment_method: PaymentMethod,
+):
+    """list_ledger_entries tags filter returns entries containing all listed tags (AND)."""
+    await create_ledger_entry(
+        db_session,
+        date_=date(2025, 1, 15),
+        description="Both",
+        category_id=active_category.id,
+        payment_method_id=active_payment_method.id,
+        amount=Decimal("-1"),
+        tags=["a", "b"],
+    )
+    await create_ledger_entry(
+        db_session,
+        date_=date(2025, 1, 15),
+        description="Only A",
+        category_id=active_category.id,
+        payment_method_id=active_payment_method.id,
+        amount=Decimal("-1"),
+        tags=["a"],
+    )
+    await db_session.flush()
+    rows, _ = await list_ledger_entries(db_session, tags=["a", "b"], limit=50)
+    assert len(rows) == 1
+    assert rows[0][0].description == "Both"
+
+
+async def test_list_ledger_entries_invalid_cursor_returns_first_page(
+    db_session: AsyncSession,
+    active_category: Category,
+    active_payment_method: PaymentMethod,
+):
+    """Invalid cursor is ignored; first page is returned."""
+    await create_ledger_entry(
+        db_session,
+        date_=date(2025, 1, 15),
+        description="Only",
+        category_id=active_category.id,
+        payment_method_id=active_payment_method.id,
+        amount=Decimal("-1"),
+    )
+    await db_session.flush()
+    rows, next_cursor = await list_ledger_entries(
+        db_session, cursor="invalid-cursor", limit=50
+    )
+    assert len(rows) == 1
+    assert next_cursor is None

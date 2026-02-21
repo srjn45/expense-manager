@@ -1,14 +1,84 @@
-"""Ledger entries API: POST (list, get, put, delete in later steps)."""
+"""Ledger entries API: POST, GET list (get by id, put, delete in later steps)."""
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from datetime import date
+from typing import Literal
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.deps import get_db
 from app.schemas.ledger_entry import LedgerEntryCreate, LedgerEntryResponse
-from app.services.ledger_entry import LedgerEntryError, create_ledger_entry
+from app.services.ledger_entry import (
+    LedgerEntryError,
+    create_ledger_entry,
+    list_ledger_entries,
+)
 
 router = APIRouter(prefix="/ledger-entries", tags=["ledger-entries"])
+
+
+@router.get(
+    "",
+    status_code=status.HTTP_200_OK,
+    responses={
+        200: {"description": "Paginated list of ledger entries"},
+        422: {"description": "Validation error (e.g. invalid date, limit)"},
+    },
+)
+async def get_ledger_entries(
+    session: AsyncSession = Depends(get_db),
+    cursor: str | None = Query(None, description="Opaque cursor for next page"),
+    limit: int = Query(50, ge=1, le=100, description="Page size"),
+    dateFrom: date | None = Query(
+        None, alias="dateFrom", description="Filter from date (inclusive)"
+    ),
+    dateTo: date | None = Query(
+        None, alias="dateTo", description="Filter to date (inclusive)"
+    ),
+    categoryId: UUID | None = Query(None, alias="categoryId"),
+    paymentMethodId: UUID | None = Query(None, alias="paymentMethodId"),
+    type: Literal["expense", "refund"] | None = Query(
+        None, description="expense=amount<0, refund=amount>0"
+    ),
+    tags: str | None = Query(None, description="Comma-separated tags (AND)"),
+) -> dict:
+    """List ledger entries, cursor-paginated, sorted by date desc. Excludes soft-deleted.
+    Invalid cursor returns first page.
+    """
+    tag_list: list[str] | None = None
+    if tags is not None and tags.strip():
+        tag_list = [t.strip() for t in tags.split(",") if t.strip()]
+    rows, next_cursor = await list_ledger_entries(
+        session,
+        cursor=cursor,
+        limit=limit,
+        date_from=dateFrom,
+        date_to=dateTo,
+        category_id=categoryId,
+        payment_method_id=paymentMethodId,
+        type_=type,
+        tags=tag_list,
+    )
+    data = [
+        LedgerEntryResponse(
+            id=entry.id,
+            date=entry.date,
+            description=entry.description,
+            categoryId=entry.category_id,
+            categoryName=cat_name,
+            paymentMethodId=entry.payment_method_id,
+            paymentMethodName=pm_name,
+            currency=currency,
+            amount=entry.amount,
+            tags=entry.tags,
+            created_at=entry.created_at,
+            updated_at=entry.updated_at,
+        ).model_dump(mode="json", by_alias=True)
+        for entry, cat_name, pm_name, currency in rows
+    ]
+    return {"data": data, "nextCursor": next_cursor}
 
 
 @router.post(
