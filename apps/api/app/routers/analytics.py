@@ -1,16 +1,22 @@
-"""Analytics API: monthly expense, etc."""
+"""Analytics API: monthly expense, expense by category, etc."""
 
-from datetime import date
+from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.deps import get_db
-from app.services.analytics import get_monthly_expense
+from app.services.analytics import get_expense_by_category, get_monthly_expense
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
 MAX_RANGE_DAYS = 366
+
+
+def _parse_month(month_str: str) -> date:
+    """Parse YYYY-MM to first day of month. Raises ValueError if invalid."""
+    parsed = datetime.strptime(month_str, "%Y-%m")
+    return date(parsed.year, parsed.month, 1)
 
 
 @router.get(
@@ -42,4 +48,28 @@ async def get_monthly_expense_route(
             detail=f"Date range must not exceed {MAX_RANGE_DAYS} days",
         )
     data = await get_monthly_expense(session, from_, to)
+    return {"data": data}
+
+
+@router.get(
+    "/expense-by-category",
+    status_code=status.HTTP_200_OK,
+    responses={
+        200: {"description": "Expense totals by category for the given month"},
+        422: {"description": "Validation error (missing or invalid month)"},
+    },
+)
+async def get_expense_by_category_route(
+    session: AsyncSession = Depends(get_db),
+    month: str = Query(..., description="Month (YYYY-MM)"),
+) -> dict:
+    """Expense by category for the given month. Positive amounts only; excludes soft-deleted."""
+    try:
+        first_day = _parse_month(month)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="month must be a valid month in YYYY-MM format",
+        )
+    data = await get_expense_by_category(session, first_day)
     return {"data": data}

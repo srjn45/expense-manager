@@ -153,3 +153,70 @@ async def test_get_monthly_expense_422_range_exceeds_max(client: AsyncClient):
     )
     assert response.status_code == 422
     assert "detail" in response.json()
+
+
+# --- GET /analytics/expense-by-category ---
+
+
+async def test_get_expense_by_category_200_empty(client: AsyncClient):
+    """GET expense-by-category with no entries returns 200 and empty data."""
+    response = await client.get("/api/v1/analytics/expense-by-category?month=2025-01")
+    assert response.status_code == 200
+    body = response.json()
+    assert "data" in body
+    assert body["data"] == []
+
+
+async def test_get_expense_by_category_200_with_data(
+    client: AsyncClient,
+    one_active_category: Category,
+    one_active_payment_method: PaymentMethod,
+):
+    """GET expense-by-category returns correct category breakdown."""
+    await client.post(
+        "/api/v1/ledger-entries",
+        json={
+            **_valid_payload(
+                category_id=one_active_category.id,
+                payment_method_id=one_active_payment_method.id,
+            ),
+            "date": "2025-03-10",
+            "description": "Lunch",
+            "amount": "50",
+        },
+    )
+    await client.post(
+        "/api/v1/ledger-entries",
+        json={
+            **_valid_payload(
+                category_id=one_active_category.id,
+                payment_method_id=one_active_payment_method.id,
+            ),
+            "date": "2025-03-20",
+            "description": "Dinner",
+            "amount": "30",
+        },
+    )
+    response = await client.get("/api/v1/analytics/expense-by-category?month=2025-03")
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert len(data) == 1
+    assert data[0]["categoryId"] == str(one_active_category.id)
+    assert data[0]["categoryName"] == "Food"
+    assert data[0]["amount"] == 80.0
+
+
+async def test_get_expense_by_category_422_missing_month(client: AsyncClient):
+    """GET without month returns 422."""
+    response = await client.get("/api/v1/analytics/expense-by-category")
+    assert response.status_code == 422
+
+
+async def test_get_expense_by_category_422_invalid_month(client: AsyncClient):
+    """GET with invalid month format or value returns 422."""
+    response = await client.get(
+        "/api/v1/analytics/expense-by-category?month=not-a-month"
+    )
+    assert response.status_code == 422
+    response2 = await client.get("/api/v1/analytics/expense-by-category?month=2025-13")
+    assert response2.status_code == 422

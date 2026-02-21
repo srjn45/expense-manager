@@ -1,12 +1,13 @@
-"""Analytics service: monthly expense, etc."""
+"""Analytics service: monthly expense, expense by category, etc."""
 
+import calendar
 from datetime import date
 from decimal import Decimal
 
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import LedgerEntry
+from app.models import Category, LedgerEntry
 
 
 async def get_monthly_expense(
@@ -69,3 +70,43 @@ async def get_monthly_expense(
             m = 1
             y += 1
     return out
+
+
+async def get_expense_by_category(
+    session: AsyncSession,
+    first_day_of_month: date,
+) -> list[dict[str, str | float]]:
+    """Expense totals by category for the given month (positive amounts only).
+    Excludes soft-deleted entries. Returns list of categoryId, categoryName, amount.
+    """
+    _, last_day = calendar.monthrange(first_day_of_month.year, first_day_of_month.month)
+    last_day_of_month = first_day_of_month.replace(day=last_day)
+
+    total = func.coalesce(func.sum(LedgerEntry.amount), Decimal("0")).label("amount")
+
+    q = (
+        select(
+            LedgerEntry.category_id,
+            Category.name.label("category_name"),
+            total,
+        )
+        .select_from(LedgerEntry)
+        .join(Category, LedgerEntry.category_id == Category.id)
+        .where(
+            LedgerEntry.deleted_at.is_(None),
+            LedgerEntry.date >= first_day_of_month,
+            LedgerEntry.date <= last_day_of_month,
+            LedgerEntry.amount > 0,
+        )
+        .group_by(LedgerEntry.category_id, Category.name)
+        .order_by(total.desc())
+    )
+    result = await session.execute(q)
+    return [
+        {
+            "categoryId": str(row[0]),
+            "categoryName": row[1],
+            "amount": float(row[2]),
+        }
+        for row in result.all()
+    ]
