@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import Category, PaymentMethod
 from app.services.analytics import (
     get_custom_expense_by_tags,
+    get_dashboard,
     get_expense_by_category,
     get_expense_by_payment_method,
     get_monthly_expense,
@@ -626,3 +627,161 @@ async def test_get_custom_expense_by_tags_excludes_soft_deleted(
         to_date=date(2025, 1, 31),
     )
     assert result == 40.0
+
+
+# --- get_dashboard ---
+
+
+async def test_get_dashboard_empty_range(
+    db_session: AsyncSession,
+):
+    """get_dashboard with no entries returns zeros and empty last_entries."""
+    result = await get_dashboard(
+        db_session,
+        from_date=date(2025, 1, 1),
+        to_date=date(2025, 1, 31),
+    )
+    assert result["totalExpense"] == 0.0
+    assert result["totalRefund"] == 0.0
+    assert result["entryCount"] == 0
+    assert result["last_entries"] == []
+
+
+async def test_get_dashboard_computes_totals_and_count(
+    db_session: AsyncSession,
+    active_category: Category,
+    active_payment_method: PaymentMethod,
+):
+    """get_dashboard sums totalExpense (positive), totalRefund (abs negative), entryCount."""
+    await create_ledger_entry(
+        db_session,
+        date_=date(2025, 1, 10),
+        description="Expense",
+        category_id=active_category.id,
+        payment_method_id=active_payment_method.id,
+        amount=Decimal("100"),
+    )
+    await create_ledger_entry(
+        db_session,
+        date_=date(2025, 1, 20),
+        description="Refund",
+        category_id=active_category.id,
+        payment_method_id=active_payment_method.id,
+        amount=Decimal("-25"),
+    )
+    await db_session.flush()
+    result = await get_dashboard(
+        db_session,
+        from_date=date(2025, 1, 1),
+        to_date=date(2025, 1, 31),
+    )
+    assert result["totalExpense"] == 100.0
+    assert result["totalRefund"] == 25.0
+    assert result["entryCount"] == 2
+    assert len(result["last_entries"]) == 2
+
+
+async def test_get_dashboard_last_entries_ordered_date_desc(
+    db_session: AsyncSession,
+    active_category: Category,
+    active_payment_method: PaymentMethod,
+):
+    """get_dashboard last_entries are most recent first (date desc, id desc)."""
+    await create_ledger_entry(
+        db_session,
+        date_=date(2025, 1, 5),
+        description="First",
+        category_id=active_category.id,
+        payment_method_id=active_payment_method.id,
+        amount=Decimal("10"),
+    )
+    await create_ledger_entry(
+        db_session,
+        date_=date(2025, 1, 15),
+        description="Second",
+        category_id=active_category.id,
+        payment_method_id=active_payment_method.id,
+        amount=Decimal("20"),
+    )
+    await create_ledger_entry(
+        db_session,
+        date_=date(2025, 1, 25),
+        description="Third",
+        category_id=active_category.id,
+        payment_method_id=active_payment_method.id,
+        amount=Decimal("30"),
+    )
+    await db_session.flush()
+    result = await get_dashboard(
+        db_session,
+        from_date=date(2025, 1, 1),
+        to_date=date(2025, 1, 31),
+        last_n=5,
+    )
+    assert len(result["last_entries"]) == 3
+    entries = result["last_entries"]
+    assert entries[0][0].description == "Third"
+    assert entries[1][0].description == "Second"
+    assert entries[2][0].description == "First"
+
+
+async def test_get_dashboard_last_entries_limit(
+    db_session: AsyncSession,
+    active_category: Category,
+    active_payment_method: PaymentMethod,
+):
+    """get_dashboard returns at most last_n entries (default 5)."""
+    for i in range(7):
+        await create_ledger_entry(
+            db_session,
+            date_=date(2025, 1, 10 + i),
+            description=f"Entry {i}",
+            category_id=active_category.id,
+            payment_method_id=active_payment_method.id,
+            amount=Decimal("1"),
+        )
+    await db_session.flush()
+    result = await get_dashboard(
+        db_session,
+        from_date=date(2025, 1, 1),
+        to_date=date(2025, 1, 31),
+        last_n=5,
+    )
+    assert result["entryCount"] == 7
+    assert len(result["last_entries"]) == 5
+
+
+async def test_get_dashboard_excludes_soft_deleted(
+    db_session: AsyncSession,
+    active_category: Category,
+    active_payment_method: PaymentMethod,
+):
+    """get_dashboard excludes entries with deleted_at set from totals, count, last_entries."""
+    await create_ledger_entry(
+        db_session,
+        date_=date(2025, 1, 10),
+        description="Kept",
+        category_id=active_category.id,
+        payment_method_id=active_payment_method.id,
+        amount=Decimal("50"),
+    )
+    entry, _, _, _ = await create_ledger_entry(
+        db_session,
+        date_=date(2025, 1, 20),
+        description="Deleted",
+        category_id=active_category.id,
+        payment_method_id=active_payment_method.id,
+        amount=Decimal("25"),
+    )
+    await db_session.flush()
+    entry.deleted_at = datetime.now(UTC)
+    await db_session.flush()
+    result = await get_dashboard(
+        db_session,
+        from_date=date(2025, 1, 1),
+        to_date=date(2025, 1, 31),
+    )
+    assert result["totalExpense"] == 50.0
+    assert result["entryCount"] == 1
+    assert len(result["last_entries"]) == 1
+    assert result["last_entries"][0][0].description == "Kept"

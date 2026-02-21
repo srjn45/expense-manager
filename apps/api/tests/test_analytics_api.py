@@ -425,3 +425,118 @@ async def test_get_custom_by_tags_422_range_exceeds_max(client: AsyncClient):
     )
     assert response.status_code == 422
     assert "detail" in response.json()
+
+
+# --- GET /analytics/dashboard ---
+
+
+async def test_get_dashboard_200_empty_range(client: AsyncClient):
+    """GET dashboard with no entries returns 200, zeros and empty lastEntries."""
+    response = await client.get(
+        "/api/v1/analytics/dashboard?from=2025-01-01&to=2025-01-31"
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["totalExpense"] == 0.0
+    assert body["totalRefund"] == 0.0
+    assert body["entryCount"] == 0
+    assert body["lastEntries"] == []
+
+
+async def test_get_dashboard_200_with_data_correct_totals_count_and_last_entries(
+    client: AsyncClient,
+    one_active_category: Category,
+    one_active_payment_method: PaymentMethod,
+):
+    """GET dashboard with data returns correct totals, count, lastEntries shape and order."""
+    await client.post(
+        "/api/v1/ledger-entries",
+        json={
+            **_valid_payload(
+                category_id=one_active_category.id,
+                payment_method_id=one_active_payment_method.id,
+            ),
+            "date": "2025-03-05",
+            "description": "First",
+            "amount": "50",
+        },
+    )
+    await client.post(
+        "/api/v1/ledger-entries",
+        json={
+            **_valid_payload(
+                category_id=one_active_category.id,
+                payment_method_id=one_active_payment_method.id,
+            ),
+            "date": "2025-03-15",
+            "description": "Second",
+            "amount": "30",
+        },
+    )
+    await client.post(
+        "/api/v1/ledger-entries",
+        json={
+            **_valid_payload(
+                category_id=one_active_category.id,
+                payment_method_id=one_active_payment_method.id,
+            ),
+            "date": "2025-03-15",
+            "description": "Refund",
+            "amount": "-10",
+        },
+    )
+    response = await client.get(
+        "/api/v1/analytics/dashboard?from=2025-03-01&to=2025-03-31"
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["totalExpense"] == 80.0
+    assert body["totalRefund"] == 10.0
+    assert body["entryCount"] == 3
+    last = body["lastEntries"]
+    assert len(last) == 3
+    assert last[0]["description"] in ("Second", "Refund")
+    assert last[1]["description"] in ("Second", "Refund")
+    assert last[2]["description"] == "First"
+    for entry in last:
+        assert "id" in entry
+        assert "date" in entry
+        assert "description" in entry
+        assert "categoryId" in entry
+        assert "categoryName" in entry
+        assert "paymentMethodId" in entry
+        assert "paymentMethodName" in entry
+        assert "currency" in entry
+        assert "amount" in entry
+        assert "tags" in entry
+        assert "createdAt" in entry
+        assert "updatedAt" in entry
+
+
+async def test_get_dashboard_422_missing_from(client: AsyncClient):
+    """GET dashboard without from returns 422."""
+    response = await client.get("/api/v1/analytics/dashboard?to=2025-01-31")
+    assert response.status_code == 422
+
+
+async def test_get_dashboard_422_missing_to(client: AsyncClient):
+    """GET dashboard without to returns 422."""
+    response = await client.get("/api/v1/analytics/dashboard?from=2025-01-01")
+    assert response.status_code == 422
+
+
+async def test_get_dashboard_422_invalid_dates(client: AsyncClient):
+    """GET dashboard with invalid date format returns 422."""
+    response = await client.get(
+        "/api/v1/analytics/dashboard?from=not-a-date&to=2025-01-31"
+    )
+    assert response.status_code == 422
+
+
+async def test_get_dashboard_422_from_after_to(client: AsyncClient):
+    """GET dashboard with from > to returns 422."""
+    response = await client.get(
+        "/api/v1/analytics/dashboard?from=2025-12-01&to=2025-01-01"
+    )
+    assert response.status_code == 422
+    assert "detail" in response.json()

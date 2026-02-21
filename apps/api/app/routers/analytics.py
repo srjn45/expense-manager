@@ -6,8 +6,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.deps import get_db
+from app.schemas.ledger_entry import LedgerEntryResponse
 from app.services.analytics import (
     get_custom_expense_by_tags,
+    get_dashboard,
     get_expense_by_category,
     get_expense_by_payment_method,
     get_monthly_expense,
@@ -154,3 +156,57 @@ async def get_custom_expense_by_tags_route(
         )
     total_expense = await get_custom_expense_by_tags(session, tag_list, from_, to)
     return {"totalExpense": total_expense}
+
+
+@router.get(
+    "/dashboard",
+    status_code=status.HTTP_200_OK,
+    responses={
+        200: {"description": "Dashboard: totals, entry count, last entries"},
+        422: {
+            "description": "Validation error (missing from/to, invalid format, from > to, range > max)"
+        },
+    },
+)
+async def get_dashboard_route(
+    session: AsyncSession = Depends(get_db),
+    from_: date = Query(..., alias="from", description="Start date (YYYY-MM-DD)"),
+    to: date = Query(..., description="End date (YYYY-MM-DD)"),
+) -> dict:
+    """Composite dashboard: totalExpense, totalRefund, entryCount, lastEntries (last 5 by date desc).
+    Excludes soft-deleted entries.
+    """
+    if from_ > to:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="from must be less than or equal to to",
+        )
+    if (to - from_).days > MAX_RANGE_DAYS:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=f"Date range must not exceed {MAX_RANGE_DAYS} days",
+        )
+    data = await get_dashboard(session, from_, to)
+    last_entries = [
+        LedgerEntryResponse(
+            id=entry.id,
+            date=entry.date,
+            description=entry.description,
+            categoryId=entry.category_id,
+            categoryName=cat_name,
+            paymentMethodId=entry.payment_method_id,
+            paymentMethodName=pm_name,
+            currency=currency,
+            amount=entry.amount,
+            tags=entry.tags,
+            created_at=entry.created_at,
+            updated_at=entry.updated_at,
+        ).model_dump(mode="json", by_alias=True)
+        for entry, cat_name, pm_name, currency in data["last_entries"]
+    ]
+    return {
+        "totalExpense": data["totalExpense"],
+        "totalRefund": data["totalRefund"],
+        "entryCount": data["entryCount"],
+        "lastEntries": last_entries,
+    }

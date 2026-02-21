@@ -1,13 +1,66 @@
-"""Analytics service: monthly expense, expense by category, etc."""
+"""Analytics service: monthly expense, expense by category, dashboard, etc."""
 
 import calendar
 from datetime import date
 from decimal import Decimal
+from typing import Any
 
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Category, LedgerEntry, PaymentMethod
+from app.services.ledger_entry import list_ledger_entries
+
+DASHBOARD_LAST_ENTRIES_LIMIT = 5
+
+
+async def get_dashboard(
+    session: AsyncSession,
+    from_date: date,
+    to_date: date,
+    last_n: int = DASHBOARD_LAST_ENTRIES_LIMIT,
+) -> dict[str, Any]:
+    """Composite dashboard: totalExpense, totalRefund, entryCount, last N entries.
+    Only non-deleted entries in date range. lastEntries ordered by date desc, id desc.
+    """
+    total_expense = func.coalesce(
+        func.sum(case((LedgerEntry.amount > 0, LedgerEntry.amount), else_=0)), 0
+    ).label("total_expense")
+    total_refund = func.coalesce(
+        func.sum(case((LedgerEntry.amount < 0, -LedgerEntry.amount), else_=0)), 0
+    ).label("total_refund")
+    entry_count = func.count(LedgerEntry.id).label("entry_count")
+
+    q = (
+        select(total_expense, total_refund, entry_count)
+        .select_from(LedgerEntry)
+        .where(
+            LedgerEntry.deleted_at.is_(None),
+            LedgerEntry.date >= from_date,
+            LedgerEntry.date <= to_date,
+        )
+    )
+    result = await session.execute(q)
+    row = result.one()
+    te, tr, cnt = row[0], row[1], row[2]
+    total_expense_val = float(te) if te is not None else 0.0
+    total_refund_val = float(tr) if tr is not None else 0.0
+    entry_count_val = int(cnt) if cnt is not None else 0
+
+    last_rows, _ = await list_ledger_entries(
+        session,
+        cursor=None,
+        limit=last_n,
+        date_from=from_date,
+        date_to=to_date,
+    )
+
+    return {
+        "totalExpense": total_expense_val,
+        "totalRefund": total_refund_val,
+        "entryCount": entry_count_val,
+        "last_entries": last_rows,
+    }
 
 
 async def get_custom_expense_by_tags(
