@@ -27,6 +27,7 @@ dev = [
 dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.24.0",
+    "pytest-cov>=6.0.0",
     "httpx>=0.28.0",
     "psycopg2-binary>=2.9.0",
     "ruff>=0.15.2",
@@ -46,6 +47,14 @@ pythonpath = ["."]
 markers = [
     "integration: mark test as integration (HTTP + DB; run serially, no -n).",
 ]
+
+[tool.coverage.run]
+source = ["app"]
+omit = ["*/tests/*"]
+
+[tool.coverage.report]
+show_missing = true
+exclude_lines = ["pragma: no cover", "def __repr__", "raise NotImplementedError"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["app"]
