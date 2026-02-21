@@ -1,4 +1,4 @@
-#!/home/srajan/Development/toto-n-cutto/pocket-money-2/apps/api/.venv/bin/python3
+#!/home/srajan/Development/toto-n-cutto/expense-manager/apps/api/.venv/bin/python3
 # -*- coding: utf-8 -*-
 import sys
 from mako.cmd import cmdline
