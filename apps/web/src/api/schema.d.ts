@@ -284,6 +284,26 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/v1/analytics/years': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * Get Years Route
+     * @description List of years that have at least one ledger entry.
+     */
+    get: operations['get_years_route_api_v1_analytics_years_get']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
 }
 export type webhooks = Record<string, never>
 export interface components {
@@ -1103,6 +1123,35 @@ export interface operations {
       }
       /** @description Validation error (missing from/to, invalid format, from > to, range > max) */
       422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  get_years_route_api_v1_analytics_years_get: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description List of years that have at least one ledger entry */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': {
+            data: number[]
+          }
+        }
+      }
+      /** @description Server error */
+      500: {
         headers: {
           [name: string]: unknown
         }

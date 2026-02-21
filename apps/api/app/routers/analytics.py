@@ -13,6 +13,7 @@ from app.services.analytics import (
     get_expense_by_category,
     get_expense_by_payment_method,
     get_monthly_expense,
+    get_years_with_data,
 )
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
@@ -159,6 +160,19 @@ async def get_custom_expense_by_tags_route(
 
 
 @router.get(
+    "/years",
+    status_code=status.HTTP_200_OK,
+    responses={
+        200: {"description": "List of years that have at least one ledger entry"}
+    },
+)
+async def get_years_route(session: AsyncSession = Depends(get_db)) -> dict:
+    """Years for which at least one non-deleted ledger entry exists, ordered descending."""
+    years = await get_years_with_data(session)
+    return {"data": years}
+
+
+@router.get(
     "/dashboard",
     status_code=status.HTTP_200_OK,
     responses={
@@ -205,8 +219,8 @@ async def get_dashboard_route(
         for entry, cat_name, pm_name, currency in data["last_entries"]
     ]
     return {
-        "totalExpense": data["totalExpense"],
-        "totalRefund": data["totalRefund"],
+        "totalExpenseByCurrency": data["totalExpenseByCurrency"],
+        "totalRefundByCurrency": data["totalRefundByCurrency"],
         "entryCount": data["entryCount"],
         "lastEntries": last_entries,
     }

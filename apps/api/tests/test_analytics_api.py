@@ -431,16 +431,18 @@ async def test_get_custom_by_tags_422_range_exceeds_max(client: AsyncClient):
 
 
 async def test_get_dashboard_200_empty_range(client: AsyncClient):
-    """GET dashboard with no entries returns 200, zeros and empty lastEntries."""
+    """GET dashboard with no entries returns 200, empty per-currency lists, empty lastEntries."""
     response = await client.get(
         "/api/v1/analytics/dashboard?from=2025-01-01&to=2025-01-31"
     )
     assert response.status_code == 200
     body = response.json()
-    assert body["totalExpense"] == 0.0
-    assert body["totalRefund"] == 0.0
+    assert body["totalExpenseByCurrency"] == []
+    assert body["totalRefundByCurrency"] == []
     assert body["entryCount"] == 0
     assert body["lastEntries"] == []
+    assert "totalExpense" not in body
+    assert "totalRefund" not in body
 
 
 async def test_get_dashboard_200_with_data_correct_totals_count_and_last_entries(
@@ -490,8 +492,8 @@ async def test_get_dashboard_200_with_data_correct_totals_count_and_last_entries
     )
     assert response.status_code == 200
     body = response.json()
-    assert body["totalExpense"] == 80.0
-    assert body["totalRefund"] == 10.0
+    assert body["totalExpenseByCurrency"] == [{"currency": "INR", "totalExpense": 80.0}]
+    assert body["totalRefundByCurrency"] == [{"currency": "INR", "totalRefund": 10.0}]
     assert body["entryCount"] == 3
     last = body["lastEntries"]
     assert len(last) == 3
@@ -540,3 +542,50 @@ async def test_get_dashboard_422_from_after_to(client: AsyncClient):
     )
     assert response.status_code == 422
     assert "detail" in response.json()
+
+
+# --- GET /analytics/years ---
+
+
+async def test_get_years_200_no_entries(client: AsyncClient):
+    """GET years with no entries returns 200 and empty data list."""
+    response = await client.get("/api/v1/analytics/years")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["data"] == []
+
+
+async def test_get_years_200_returns_years_ordered_desc(
+    client: AsyncClient,
+    one_active_category: Category,
+    one_active_payment_method: PaymentMethod,
+):
+    """GET years with entries in 2024 and 2025 returns [2025, 2024]."""
+    await client.post(
+        "/api/v1/ledger-entries",
+        json={
+            **_valid_payload(
+                category_id=one_active_category.id,
+                payment_method_id=one_active_payment_method.id,
+            ),
+            "date": "2024-06-15",
+            "description": "2024 entry",
+            "amount": "10",
+        },
+    )
+    await client.post(
+        "/api/v1/ledger-entries",
+        json={
+            **_valid_payload(
+                category_id=one_active_category.id,
+                payment_method_id=one_active_payment_method.id,
+            ),
+            "date": "2025-01-10",
+            "description": "2025 entry",
+            "amount": "20",
+        },
+    )
+    response = await client.get("/api/v1/analytics/years")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["data"] == [2025, 2024]

@@ -14,6 +14,8 @@ from app.services.analytics import (
     get_expense_by_category,
     get_expense_by_payment_method,
     get_monthly_expense,
+    get_totals_by_currency,
+    get_years_with_data,
 )
 from app.services.ledger_entry import create_ledger_entry
 
@@ -629,20 +631,176 @@ async def test_get_custom_expense_by_tags_excludes_soft_deleted(
     assert result == 40.0
 
 
+# --- get_totals_by_currency ---
+
+
+async def test_get_totals_by_currency_empty_range(db_session: AsyncSession):
+    """get_totals_by_currency with no entries returns empty list."""
+    result = await get_totals_by_currency(
+        db_session,
+        from_date=date(2025, 1, 1),
+        to_date=date(2025, 1, 31),
+    )
+    assert result == []
+
+
+async def test_get_totals_by_currency_one_currency_mixed_entries(
+    db_session: AsyncSession,
+    active_category: Category,
+    active_payment_method: PaymentMethod,
+):
+    """get_totals_by_currency with one currency: correct totalExpense and totalRefund."""
+    await create_ledger_entry(
+        db_session,
+        date_=date(2025, 1, 10),
+        description="Expense",
+        category_id=active_category.id,
+        payment_method_id=active_payment_method.id,
+        amount=Decimal("100"),
+    )
+    await create_ledger_entry(
+        db_session,
+        date_=date(2025, 1, 20),
+        description="Refund",
+        category_id=active_category.id,
+        payment_method_id=active_payment_method.id,
+        amount=Decimal("-25"),
+    )
+    await db_session.flush()
+    result = await get_totals_by_currency(
+        db_session,
+        from_date=date(2025, 1, 1),
+        to_date=date(2025, 1, 31),
+    )
+    assert len(result) == 1
+    assert result[0]["currency"] == "INR"
+    assert result[0]["totalExpense"] == 100.0
+    assert result[0]["totalRefund"] == 25.0
+
+
+async def test_get_totals_by_currency_two_currencies(
+    db_session: AsyncSession,
+    active_category: Category,
+    active_payment_method: PaymentMethod,
+):
+    """get_totals_by_currency with two payment methods (currencies) returns two rows."""
+    pm_usd = PaymentMethod(
+        id=uuid4(),
+        name="USD Card",
+        currency="USD",
+        active=True,
+    )
+    db_session.add(pm_usd)
+    await db_session.flush()
+    await create_ledger_entry(
+        db_session,
+        date_=date(2025, 1, 10),
+        description="INR expense",
+        category_id=active_category.id,
+        payment_method_id=active_payment_method.id,
+        amount=Decimal("200"),
+    )
+    await create_ledger_entry(
+        db_session,
+        date_=date(2025, 1, 15),
+        description="USD expense",
+        category_id=active_category.id,
+        payment_method_id=pm_usd.id,
+        amount=Decimal("50"),
+    )
+    await create_ledger_entry(
+        db_session,
+        date_=date(2025, 1, 20),
+        description="INR refund",
+        category_id=active_category.id,
+        payment_method_id=active_payment_method.id,
+        amount=Decimal("-10"),
+    )
+    await db_session.flush()
+    result = await get_totals_by_currency(
+        db_session,
+        from_date=date(2025, 1, 1),
+        to_date=date(2025, 1, 31),
+    )
+    assert len(result) == 2
+    by_currency = {r["currency"]: r for r in result}
+    assert by_currency["INR"]["totalExpense"] == 200.0
+    assert by_currency["INR"]["totalRefund"] == 10.0
+    assert by_currency["USD"]["totalExpense"] == 50.0
+    assert by_currency["USD"]["totalRefund"] == 0.0
+
+
+# --- get_years_with_data ---
+
+
+async def test_get_years_with_data_no_entries(db_session: AsyncSession):
+    """get_years_with_data with no entries returns empty list."""
+    result = await get_years_with_data(db_session)
+    assert result == []
+
+
+async def test_get_years_with_data_returns_years_ordered_desc(
+    db_session: AsyncSession,
+    active_category: Category,
+    active_payment_method: PaymentMethod,
+):
+    """get_years_with_data returns distinct years with data, most recent first."""
+    await create_ledger_entry(
+        db_session,
+        date_=date(2024, 6, 15),
+        description="2024",
+        category_id=active_category.id,
+        payment_method_id=active_payment_method.id,
+        amount=Decimal("10"),
+    )
+    await create_ledger_entry(
+        db_session,
+        date_=date(2025, 1, 10),
+        description="2025",
+        category_id=active_category.id,
+        payment_method_id=active_payment_method.id,
+        amount=Decimal("20"),
+    )
+    await db_session.flush()
+    result = await get_years_with_data(db_session)
+    assert result == [2025, 2024]
+
+
+async def test_get_years_with_data_excludes_soft_deleted(
+    db_session: AsyncSession,
+    active_category: Category,
+    active_payment_method: PaymentMethod,
+):
+    """get_years_with_data excludes entries with deleted_at set."""
+    entry, _, _, _ = await create_ledger_entry(
+        db_session,
+        date_=date(2025, 1, 10),
+        description="Deleted",
+        category_id=active_category.id,
+        payment_method_id=active_payment_method.id,
+        amount=Decimal("10"),
+    )
+    await db_session.flush()
+    entry.deleted_at = datetime.now(UTC)
+    await db_session.flush()
+    result = await get_years_with_data(db_session)
+    assert result == []
+
+
 # --- get_dashboard ---
 
 
 async def test_get_dashboard_empty_range(
     db_session: AsyncSession,
 ):
-    """get_dashboard with no entries returns zeros and empty last_entries."""
+    """get_dashboard with no entries returns empty per-currency lists and empty last_entries."""
     result = await get_dashboard(
         db_session,
         from_date=date(2025, 1, 1),
         to_date=date(2025, 1, 31),
     )
-    assert result["totalExpense"] == 0.0
-    assert result["totalRefund"] == 0.0
+    assert result["totalExpenseByCurrency"] == []
+    assert result["totalRefundByCurrency"] == []
     assert result["entryCount"] == 0
     assert result["last_entries"] == []
 
@@ -652,7 +810,7 @@ async def test_get_dashboard_computes_totals_and_count(
     active_category: Category,
     active_payment_method: PaymentMethod,
 ):
-    """get_dashboard sums totalExpense (positive), totalRefund (abs negative), entryCount."""
+    """get_dashboard returns per-currency totals, entryCount, last_entries."""
     await create_ledger_entry(
         db_session,
         date_=date(2025, 1, 10),
@@ -675,10 +833,57 @@ async def test_get_dashboard_computes_totals_and_count(
         from_date=date(2025, 1, 1),
         to_date=date(2025, 1, 31),
     )
-    assert result["totalExpense"] == 100.0
-    assert result["totalRefund"] == 25.0
+    assert result["totalExpenseByCurrency"] == [
+        {"currency": "INR", "totalExpense": 100.0}
+    ]
+    assert result["totalRefundByCurrency"] == [{"currency": "INR", "totalRefund": 25.0}]
     assert result["entryCount"] == 2
     assert len(result["last_entries"]) == 2
+
+
+async def test_get_dashboard_two_currencies(
+    db_session: AsyncSession,
+    active_category: Category,
+    active_payment_method: PaymentMethod,
+):
+    """get_dashboard with two currencies returns two items in each per-currency list."""
+    pm_usd = PaymentMethod(
+        id=uuid4(),
+        name="USD Card",
+        currency="USD",
+        active=True,
+    )
+    db_session.add(pm_usd)
+    await db_session.flush()
+    await create_ledger_entry(
+        db_session,
+        date_=date(2025, 1, 10),
+        description="INR",
+        category_id=active_category.id,
+        payment_method_id=active_payment_method.id,
+        amount=Decimal("100"),
+    )
+    await create_ledger_entry(
+        db_session,
+        date_=date(2025, 1, 15),
+        description="USD",
+        category_id=active_category.id,
+        payment_method_id=pm_usd.id,
+        amount=Decimal("50"),
+    )
+    await db_session.flush()
+    result = await get_dashboard(
+        db_session,
+        from_date=date(2025, 1, 1),
+        to_date=date(2025, 1, 31),
+    )
+    assert len(result["totalExpenseByCurrency"]) == 2
+    assert len(result["totalRefundByCurrency"]) == 2
+    by_currency_exp = {
+        r["currency"]: r["totalExpense"] for r in result["totalExpenseByCurrency"]
+    }
+    assert by_currency_exp["INR"] == 100.0
+    assert by_currency_exp["USD"] == 50.0
 
 
 async def test_get_dashboard_last_entries_ordered_date_desc(
@@ -781,7 +986,9 @@ async def test_get_dashboard_excludes_soft_deleted(
         from_date=date(2025, 1, 1),
         to_date=date(2025, 1, 31),
     )
-    assert result["totalExpense"] == 50.0
+    assert result["totalExpenseByCurrency"] == [
+        {"currency": "INR", "totalExpense": 50.0}
+    ]
     assert result["entryCount"] == 1
     assert len(result["last_entries"]) == 1
     assert result["last_entries"][0][0].description == "Kept"

@@ -14,14 +14,14 @@ from app.services.ledger_entry import list_ledger_entries
 DASHBOARD_LAST_ENTRIES_LIMIT = 5
 
 
-async def get_dashboard(
+async def get_totals_by_currency(
     session: AsyncSession,
     from_date: date,
     to_date: date,
-    last_n: int = DASHBOARD_LAST_ENTRIES_LIMIT,
-) -> dict[str, Any]:
-    """Composite dashboard: totalExpense, totalRefund, entryCount, last N entries.
-    Only non-deleted entries in date range. lastEntries ordered by date desc, id desc.
+) -> list[dict[str, str | float]]:
+    """Expense and refund totals per currency in date range.
+    Join LedgerEntry with PaymentMethod; group by currency.
+    Only non-deleted entries. Returns list of { currency, totalExpense, totalRefund }.
     """
     total_expense = func.coalesce(
         func.sum(case((LedgerEntry.amount > 0, LedgerEntry.amount), else_=0)), 0
@@ -29,10 +29,60 @@ async def get_dashboard(
     total_refund = func.coalesce(
         func.sum(case((LedgerEntry.amount < 0, -LedgerEntry.amount), else_=0)), 0
     ).label("total_refund")
-    entry_count = func.count(LedgerEntry.id).label("entry_count")
 
     q = (
-        select(total_expense, total_refund, entry_count)
+        select(
+            PaymentMethod.currency,
+            total_expense,
+            total_refund,
+        )
+        .select_from(LedgerEntry)
+        .join(PaymentMethod, LedgerEntry.payment_method_id == PaymentMethod.id)
+        .where(
+            LedgerEntry.deleted_at.is_(None),
+            LedgerEntry.date >= from_date,
+            LedgerEntry.date <= to_date,
+        )
+        .group_by(PaymentMethod.currency)
+        .order_by(PaymentMethod.currency)
+    )
+    result = await session.execute(q)
+    return [
+        {
+            "currency": row[0],
+            "totalExpense": float(row[1]) if row[1] is not None else 0.0,
+            "totalRefund": float(row[2]) if row[2] is not None else 0.0,
+        }
+        for row in result.all()
+    ]
+
+
+async def get_years_with_data(session: AsyncSession) -> list[int]:
+    """Distinct years for which at least one non-deleted ledger entry exists, ordered desc."""
+    year_col = func.extract("year", LedgerEntry.date).label("year")
+    q = (
+        select(year_col)
+        .select_from(LedgerEntry)
+        .where(LedgerEntry.deleted_at.is_(None))
+        .distinct()
+        .order_by(year_col.desc())
+    )
+    result = await session.execute(q)
+    return [int(row[0]) for row in result.all()]
+
+
+async def get_dashboard(
+    session: AsyncSession,
+    from_date: date,
+    to_date: date,
+    last_n: int = DASHBOARD_LAST_ENTRIES_LIMIT,
+) -> dict[str, Any]:
+    """Composite dashboard: per-currency totals, entryCount, last N entries.
+    Only non-deleted entries in date range. lastEntries ordered by date desc, id desc.
+    """
+    entry_count = func.count(LedgerEntry.id).label("entry_count")
+    q = (
+        select(entry_count)
         .select_from(LedgerEntry)
         .where(
             LedgerEntry.deleted_at.is_(None),
@@ -42,10 +92,17 @@ async def get_dashboard(
     )
     result = await session.execute(q)
     row = result.one()
-    te, tr, cnt = row[0], row[1], row[2]
-    total_expense_val = float(te) if te is not None else 0.0
-    total_refund_val = float(tr) if tr is not None else 0.0
-    entry_count_val = int(cnt) if cnt is not None else 0
+    entry_count_val = int(row[0]) if row[0] is not None else 0
+
+    totals_by_currency = await get_totals_by_currency(session, from_date, to_date)
+    total_expense_by_currency = [
+        {"currency": r["currency"], "totalExpense": r["totalExpense"]}
+        for r in totals_by_currency
+    ]
+    total_refund_by_currency = [
+        {"currency": r["currency"], "totalRefund": r["totalRefund"]}
+        for r in totals_by_currency
+    ]
 
     last_rows, _ = await list_ledger_entries(
         session,
@@ -56,8 +113,8 @@ async def get_dashboard(
     )
 
     return {
-        "totalExpense": total_expense_val,
-        "totalRefund": total_refund_val,
+        "totalExpenseByCurrency": total_expense_by_currency,
+        "totalRefundByCurrency": total_refund_by_currency,
         "entryCount": entry_count_val,
         "last_entries": last_rows,
     }

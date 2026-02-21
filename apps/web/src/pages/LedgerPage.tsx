@@ -105,18 +105,44 @@ function useCategories() {
 
 const today = () => new Date().toISOString().slice(0, 10)
 
+function getCurrentMonth(): string {
+  const n = new Date()
+  return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}`
+}
+
+function monthToRange(month: string): { dateFrom: string; dateTo: string } | null {
+  if (!month || !/^\d{4}-\d{2}$/.test(month)) return null
+  const [y, m] = month.split('-').map(Number)
+  const first = `${y}-${String(m).padStart(2, '0')}-01`
+  const lastDay = new Date(y, m, 0).getDate()
+  const last = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+  return { dateFrom: first, dateTo: last }
+}
+
+const initialMonth = getCurrentMonth()
+const initialRange = monthToRange(initialMonth)
+
 export function LedgerPage() {
   const queryClient = useQueryClient()
   const [modalOpen, setModalOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<LedgerEntry | null>(null)
   const [filters, setFilters] = useState<{
+    selectedMonth: string
+    categoryId: string
+    paymentMethodId: string
+  }>({ selectedMonth: initialMonth, categoryId: '', paymentMethodId: '' })
+  const [filtersApplied, setFiltersApplied] = useState<{
     dateFrom: string
     dateTo: string
     categoryId: string
     paymentMethodId: string
-  }>({ dateFrom: '', dateTo: '', categoryId: '', paymentMethodId: '' })
-  const [filtersApplied, setFiltersApplied] = useState(filters)
+  }>({
+    dateFrom: initialRange?.dateFrom ?? '',
+    dateTo: initialRange?.dateTo ?? '',
+    categoryId: '',
+    paymentMethodId: '',
+  })
 
   const { data: paymentMethods = [] } = usePaymentMethods()
   const { data: categories = [] } = useCategories()
@@ -257,9 +283,17 @@ export function LedgerPage() {
     }
   })
 
-  const applyFilters = () => setFiltersApplied({ ...filters })
+  const applyFilters = () => {
+    const range = filters.selectedMonth ? monthToRange(filters.selectedMonth) : null
+    setFiltersApplied({
+      dateFrom: range?.dateFrom ?? '',
+      dateTo: range?.dateTo ?? '',
+      categoryId: filters.categoryId,
+      paymentMethodId: filters.paymentMethodId,
+    })
+  }
   const clearFilters = () => {
-    setFilters({ dateFrom: '', dateTo: '', categoryId: '', paymentMethodId: '' })
+    setFilters({ selectedMonth: '', categoryId: '', paymentMethodId: '' })
     setFiltersApplied({ dateFrom: '', dateTo: '', categoryId: '', paymentMethodId: '' })
   }
 
@@ -312,27 +346,16 @@ export function LedgerPage() {
       <div className="rounded-lg border border-gray-200 bg-white p-4">
         <div className="flex flex-wrap items-end gap-3">
           <div>
-            <label htmlFor="filter-dateFrom" className="block text-xs font-medium text-gray-600">
-              Date from
+            <label htmlFor="filter-month" className="block text-xs font-medium text-gray-600">
+              Month
             </label>
             <input
-              id="filter-dateFrom"
-              type="date"
-              value={filters.dateFrom}
-              onChange={(e) => setFilters((f) => ({ ...f, dateFrom: e.target.value }))}
+              id="filter-month"
+              type="month"
+              value={filters.selectedMonth}
+              onChange={(e) => setFilters((f) => ({ ...f, selectedMonth: e.target.value }))}
               className="mt-1 block rounded-md border border-gray-300 px-3 py-2 text-sm"
-            />
-          </div>
-          <div>
-            <label htmlFor="filter-dateTo" className="block text-xs font-medium text-gray-600">
-              Date to
-            </label>
-            <input
-              id="filter-dateTo"
-              type="date"
-              value={filters.dateTo}
-              onChange={(e) => setFilters((f) => ({ ...f, dateTo: e.target.value }))}
-              className="mt-1 block rounded-md border border-gray-300 px-3 py-2 text-sm"
+              aria-label="Filter by month"
             />
           </div>
           <div>

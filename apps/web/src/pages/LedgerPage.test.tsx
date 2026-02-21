@@ -77,9 +77,10 @@ describe('LedgerPage', () => {
 
   it('shows empty state when no entries', async () => {
     renderLedger()
-    expect(
-      await screen.findByText(/no entries yet\. add your first expense or refund/i)
-    ).toBeInTheDocument()
+    const emptyMessage = await screen.findByText(
+      /no entries yet\. add your first|no entries match the filters/i
+    )
+    expect(emptyMessage).toBeInTheDocument()
     const addButtons = screen.getAllByRole('button', { name: /add entry/i })
     expect(addButtons.length).toBeGreaterThanOrEqual(1)
   })
@@ -162,7 +163,7 @@ describe('LedgerPage', () => {
     const user = userEvent.setup()
     renderLedger()
     await waitFor(() => {
-      expect(screen.getByText(/no entries yet/i)).toBeInTheDocument()
+      expect(screen.getByText(/no entries yet|no entries match the filters/i)).toBeInTheDocument()
     })
     const addButtons = screen.getAllByRole('button', { name: /add entry/i })
     await user.click(addButtons[0]!)
@@ -223,5 +224,48 @@ describe('LedgerPage', () => {
       expect(screen.getByRole('alert')).toHaveTextContent(/network error/i)
     })
     expect(screen.getByRole('button', { name: /retry/i })).toBeInTheDocument()
+  })
+
+  it('shows month selector instead of date from/to', () => {
+    renderLedger()
+    expect(screen.getByLabelText(/filter by month/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/filter by month/i)).toHaveAttribute('type', 'month')
+    expect(screen.queryByLabelText(/date from/i)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/date to/i)).not.toBeInTheDocument()
+  })
+
+  it('calls ledger-entries with dateFrom and dateTo when month is applied', async () => {
+    const user = userEvent.setup()
+    renderLedger()
+    const monthInput = screen.getByLabelText(/filter by month/i)
+    await user.clear(monthInput)
+    await user.type(monthInput, '2025-03')
+    await user.click(screen.getByRole('button', { name: /apply filters/i }))
+    await waitFor(() => {
+      const ledgerCalls = mockApi.GET.mock.calls.filter(
+        (call) => call[0] === '/api/v1/ledger-entries'
+      )
+      const lastCall = ledgerCalls[ledgerCalls.length - 1]
+      const opts = lastCall?.[1] as { params?: { query?: Record<string, unknown> } } | undefined
+      expect(opts?.params?.query).toMatchObject({
+        dateFrom: '2025-03-01',
+        dateTo: '2025-03-31',
+      })
+    })
+  })
+
+  it('clear filters removes date range from ledger fetch', async () => {
+    const user = userEvent.setup()
+    renderLedger()
+    await user.click(screen.getByRole('button', { name: /clear filters/i }))
+    await waitFor(() => {
+      const ledgerCalls = mockApi.GET.mock.calls.filter(
+        (call) => call[0] === '/api/v1/ledger-entries'
+      )
+      const lastCall = ledgerCalls[ledgerCalls.length - 1]
+      const opts = lastCall?.[1] as { params?: { query?: Record<string, unknown> } } | undefined
+      expect(opts?.params?.query?.dateFrom).toBeUndefined()
+      expect(opts?.params?.query?.dateTo).toBeUndefined()
+    })
   })
 })
