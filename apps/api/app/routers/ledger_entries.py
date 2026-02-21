@@ -13,6 +13,7 @@ from app.schemas.ledger_entry import LedgerEntryCreate, LedgerEntryResponse
 from app.services.ledger_entry import (
     LedgerEntryError,
     create_ledger_entry,
+    get_ledger_entry,
     list_ledger_entries,
 )
 
@@ -79,6 +80,44 @@ async def get_ledger_entries(
         for entry, cat_name, pm_name, currency in rows
     ]
     return {"data": data, "nextCursor": next_cursor}
+
+
+@router.get(
+    "/{id}",
+    status_code=status.HTTP_200_OK,
+    responses={
+        200: {"description": "Ledger entry with resolved names and currency"},
+        404: {"description": "Entry not found or soft-deleted"},
+        422: {"description": "Invalid id format"},
+    },
+)
+async def get_ledger_entry_by_id(
+    id: UUID,
+    session: AsyncSession = Depends(get_db),
+) -> dict:
+    """Get a single ledger entry by id. Returns 404 if not found or soft-deleted."""
+    row = await get_ledger_entry(session, id)
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Ledger entry not found",
+        )
+    entry, category_name, payment_method_name, currency = row
+    payload = LedgerEntryResponse(
+        id=entry.id,
+        date=entry.date,
+        description=entry.description,
+        categoryId=entry.category_id,
+        categoryName=category_name,
+        paymentMethodId=entry.payment_method_id,
+        paymentMethodName=payment_method_name,
+        currency=currency,
+        amount=entry.amount,
+        tags=entry.tags,
+        created_at=entry.created_at,
+        updated_at=entry.updated_at,
+    ).model_dump(mode="json", by_alias=True)
+    return {"data": payload}
 
 
 @router.post(

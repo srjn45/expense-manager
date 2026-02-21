@@ -12,6 +12,7 @@ from app.models import Category, PaymentMethod
 from app.services.ledger_entry import (
     LedgerEntryError,
     create_ledger_entry,
+    get_ledger_entry,
     list_ledger_entries,
 )
 from app.services.tag_suggestion import get_tag_suggestions
@@ -171,6 +172,64 @@ async def test_create_ledger_entry_payment_method_inactive(
             amount=Decimal("1"),
         )
     assert "Payment method" in exc_info.value.message
+
+
+# --- get_ledger_entry ---
+
+
+async def test_get_ledger_entry_returns_none_when_not_found(
+    db_session: AsyncSession,
+):
+    """get_ledger_entry returns None for non-existent id."""
+    result = await get_ledger_entry(db_session, uuid4())
+    assert result is None
+
+
+async def test_get_ledger_entry_returns_none_when_deleted(
+    db_session: AsyncSession,
+    active_category: Category,
+    active_payment_method: PaymentMethod,
+):
+    """get_ledger_entry returns None when entry is soft-deleted."""
+    entry, _, _, _ = await create_ledger_entry(
+        db_session,
+        date_=date(2025, 1, 15),
+        description="To delete",
+        category_id=active_category.id,
+        payment_method_id=active_payment_method.id,
+        amount=Decimal("-1"),
+    )
+    await db_session.flush()
+    entry.deleted_at = datetime.now(UTC)
+    await db_session.flush()
+    result = await get_ledger_entry(db_session, entry.id)
+    assert result is None
+
+
+async def test_get_ledger_entry_returns_entry_with_names_when_found(
+    db_session: AsyncSession,
+    active_category: Category,
+    active_payment_method: PaymentMethod,
+):
+    """get_ledger_entry returns (entry, category_name, pm_name, currency) when found."""
+    entry, _, _, _ = await create_ledger_entry(
+        db_session,
+        date_=date(2025, 1, 15),
+        description="Lunch",
+        category_id=active_category.id,
+        payment_method_id=active_payment_method.id,
+        amount=Decimal("-10.50"),
+        tags=["food"],
+    )
+    await db_session.flush()
+    result = await get_ledger_entry(db_session, entry.id)
+    assert result is not None
+    got_entry, cat_name, pm_name, currency = result
+    assert got_entry.id == entry.id
+    assert got_entry.description == "Lunch"
+    assert cat_name == "Food"
+    assert pm_name == "Card"
+    assert currency == "INR"
 
 
 # --- list_ledger_entries ---

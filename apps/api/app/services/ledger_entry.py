@@ -78,6 +78,27 @@ def _encode_cursor(entry_date: date, entry_id: UUID) -> str:
     return base64.urlsafe_b64encode(json.dumps(payload).encode()).decode()
 
 
+async def get_ledger_entry(
+    session: AsyncSession,
+    id: UUID,
+) -> tuple[LedgerEntry, str, str, str] | None:
+    """Get a ledger entry by id with resolved category name, payment method name, currency.
+    Returns None if not found or soft-deleted.
+    """
+    q = (
+        select(LedgerEntry, Category.name, PaymentMethod.name, PaymentMethod.currency)
+        .select_from(LedgerEntry)
+        .join(Category, LedgerEntry.category_id == Category.id)
+        .join(PaymentMethod, LedgerEntry.payment_method_id == PaymentMethod.id)
+        .where(LedgerEntry.id == id, LedgerEntry.deleted_at.is_(None))
+    )
+    result = await session.execute(q)
+    row = result.one_or_none()
+    if row is None:
+        return None
+    return (row[0], row[1], row[2], row[3])
+
+
 def _decode_cursor(cursor: str) -> tuple[date, UUID] | None:
     """Decode cursor to (date, id). Returns None if invalid."""
     try:

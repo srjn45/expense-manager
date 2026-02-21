@@ -607,3 +607,88 @@ async def test_get_ledger_entries_422_invalid_date_format(client: AsyncClient):
     """GET with invalid dateFrom/dateTo returns 422."""
     r = await client.get("/api/v1/ledger-entries?dateFrom=not-a-date")
     assert r.status_code == 422
+
+
+# --- GET /api/v1/ledger-entries/{id} ---
+
+
+async def test_get_ledger_entry_by_id_200_existing(
+    client: AsyncClient,
+    one_active_category: Category,
+    one_active_payment_method: PaymentMethod,
+):
+    """GET /ledger-entries/{id} with existing id returns 200 and full response shape."""
+    create_resp = await client.post(
+        "/api/v1/ledger-entries",
+        json=_valid_payload(
+            category_id=one_active_category.id,
+            payment_method_id=one_active_payment_method.id,
+        )
+        | {"description": "Single entry"},
+    )
+    assert create_resp.status_code == 201
+    entry_id = create_resp.json()["data"]["id"]
+    response = await client.get(f"/api/v1/ledger-entries/{entry_id}")
+    assert response.status_code == 200
+    body = response.json()
+    assert "data" in body
+    data = body["data"]
+    assert data["id"] == entry_id
+    assert data["description"] == "Single entry"
+    assert data["categoryName"] == "Food"
+    assert data["paymentMethodName"] == "Cash"
+    assert data["currency"] == "INR"
+    assert "date" in data
+    assert "categoryId" in data
+    assert "paymentMethodId" in data
+    assert "amount" in data
+    assert "tags" in data
+    assert "createdAt" in data
+    assert "updatedAt" in data
+
+
+async def test_get_ledger_entry_by_id_404_not_found(client: AsyncClient):
+    """GET /ledger-entries/{id} with non-existent id returns 404."""
+    response = await client.get(f"/api/v1/ledger-entries/{uuid.uuid4()}")
+    assert response.status_code == 404
+    assert "detail" in response.json()
+
+
+async def test_get_ledger_entry_by_id_404_soft_deleted(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    one_active_category: Category,
+    one_active_payment_method: PaymentMethod,
+):
+    """GET /ledger-entries/{id} with soft-deleted entry returns 404."""
+    from datetime import UTC, datetime
+
+    from sqlalchemy import update
+
+    from app.models import LedgerEntry
+
+    create_resp = await client.post(
+        "/api/v1/ledger-entries",
+        json=_valid_payload(
+            category_id=one_active_category.id,
+            payment_method_id=one_active_payment_method.id,
+        )
+        | {"description": "To delete"},
+    )
+    assert create_resp.status_code == 201
+    entry_id = create_resp.json()["data"]["id"]
+    await db_session.execute(
+        update(LedgerEntry)
+        .where(LedgerEntry.id == uuid.UUID(entry_id))
+        .values(deleted_at=datetime.now(UTC))
+    )
+    await db_session.flush()
+    response = await client.get(f"/api/v1/ledger-entries/{entry_id}")
+    assert response.status_code == 404
+    assert "detail" in response.json()
+
+
+async def test_get_ledger_entry_by_id_422_invalid_uuid(client: AsyncClient):
+    """GET /ledger-entries/{id} with invalid UUID returns 422."""
+    response = await client.get("/api/v1/ledger-entries/not-a-uuid")
+    assert response.status_code == 422
