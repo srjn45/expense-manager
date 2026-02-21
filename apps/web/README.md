@@ -40,8 +40,8 @@ npm run build
 
 The frontend can be built and run with Docker. The image serves the built app with nginx and proxies `/api` to the backend (Option B: relative URL + reverse proxy).
 
-- **Build (from repo root):** `docker compose build frontend`
-- **Run:** `docker compose up -d` — frontend is on port 80; API is not exposed (nginx in the frontend container proxies `/api` to the `api` service).
+- **Build (from repo root):** `docker compose -f docker-compose.local.yml build frontend`
+- **Run (local stack):** Start Postgres first with `docker compose -f docker-compose.postgres.yml up -d`, then `docker compose -f docker-compose.local.yml up -d` — frontend is on port 80; nginx proxies `/api` to the `api` service.
 - **Env (at runtime):** `API_BACKEND_URL` — URL nginx uses to proxy `/api` (default `http://api:8000` for Docker Compose). Override when the backend runs elsewhere (e.g. `-e API_BACKEND_URL=http://backend-host:8000`).
 
 The app is built with an empty `VITE_API_BASE_URL` so all API calls are same-origin (`/api/...`).

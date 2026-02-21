@@ -1,0 +1,36 @@
+# Local deployment: API + frontend only (PostgreSQL must be running separately).
+# Start postgres first: docker compose -f docker-compose.postgres.yml up -d
+# Then start app:     docker compose -f docker-compose.local.yml up -d
+# Stop app only:      docker compose -f docker-compose.local.yml down  (postgres keeps running)
+#
+# Frontend is exposed on port 80; nginx proxies /api to the api service.
+
+services:
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    container_name: expense-manager-api
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/expense_manager
+    networks:
+      - expense-manager-network
+
+  frontend:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+    container_name: expense-manager-frontend
+    ports:
+      - "80:80"
+    environment:
+      API_BACKEND_URL: http://api:8000
+    depends_on:
+      - api
+    networks:
+      - expense-manager-network
+
+networks:
+  expense-manager-network:
+    external: true
+    name: expense-manager-network

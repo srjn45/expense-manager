@@ -22,13 +22,12 @@ alwaysApply: true
 ## Database not available
 
 - PostgreSQL is required for tests and the API. From the **repo root**:
-  ```bash
-  docker compose up -d
-  ```
-- This starts Postgres 16 on port 5432 with databases `expense_manager` and `expense_manager_test`.
+  - For tests (ephemeral DB): `docker compose -f docker-compose.test.yml up -d`
+  - For local dev (persistent DB): `docker compose -f docker-compose.postgres.yml up -d`
+- Test compose (docker-compose.test.yml) exposes Postgres on **5433**; persistent (docker-compose.postgres.yml) on **5432**. Both have databases `expense_manager` and `expense_manager_test`.
 - In `apps/api/`, ensure `.env` exists (copy from `.env.example`) with at least:
-  - `DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/expense_manager`
-  - Optional: `TEST_DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/expense_manager_test`
+  - `DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/expense_manager` (local)
+  - For tests, use `.env.test` which points at port 5433: `TEST_DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5433/expense_manager_test`
 - If the schema is missing, run migrations from `apps/api/`: `uv run alembic upgrade head`
 
 ## Pre-commit (lint + tests)

@@ -6,11 +6,10 @@ Backend for Expense Manager (FastAPI + PostgreSQL). See [doc/rfc-001-expense-man
 
 1. **uv** (Python package manager): install from [https://docs.astral.sh/uv/](https://docs.astral.sh/uv/).
 
-2. **PostgreSQL** — start the test/dev database with Docker Compose (from repo root):
-   ```bash
-   docker compose up -d
-   ```
-   This starts PostgreSQL 16 on port 5432 with databases `expense_manager` and `expense_manager_test`. Stop with `docker compose down`.
+2. **PostgreSQL** — from repo root:
+   - **Tests only (ephemeral DB):** `docker compose -f docker-compose.test.yml up -d` — Postgres on **5433**; data is lost on `docker compose -f docker-compose.test.yml down`.
+   - **Local dev (persistent DB):** `docker compose -f docker-compose.postgres.yml up -d` — Postgres with a volume; data survives `down`. Then run API/frontend with `docker compose -f docker-compose.local.yml up -d` when needed.
+   Persistent Postgres is on port 5432; test Postgres (docker-compose.test.yml) is on port 5433. Both have databases `expense_manager` and `expense_manager_test`.
 
 3. From `apps/api/`:
    ```bash
@@ -25,7 +24,7 @@ Backend for Expense Manager (FastAPI + PostgreSQL). See [doc/rfc-001-expense-man
 5. Run migrations (for both DBs if using separate test DB):
    ```bash
    uv run alembic upgrade head
-   DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/expense_manager_test uv run alembic upgrade head
+   DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5433/expense_manager_test uv run alembic upgrade head
    ```
 
 6. Start the API:

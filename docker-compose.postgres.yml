@@ -1,0 +1,32 @@
+# Persistent PostgreSQL for local development (data survives down).
+# Run once and leave up; then use docker-compose.local.yml for API + frontend.
+# Start: docker compose -f docker-compose.postgres.yml up -d
+# Stop:  docker compose -f docker-compose.postgres.yml down  (data kept in volume)
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: expense-manager-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: expense_manager
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./apps/api/docker/postgres-init.sh:/docker-entrypoint-initdb.d/postgres-init.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d expense_manager"]
+      interval: 2s
+      timeout: 5s
+      retries: 5
+    networks:
+      - expense-manager-network
+
+networks:
+  expense-manager-network:
+    name: expense-manager-network
+
+volumes:
+  postgres_data:
