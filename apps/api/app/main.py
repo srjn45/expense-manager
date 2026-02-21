@@ -3,6 +3,7 @@
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,6 +23,14 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Expense Manager API", version="0.1.0", lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 app.include_router(payment_methods.router, prefix="/api/v1")
 app.include_router(categories.router, prefix="/api/v1")
