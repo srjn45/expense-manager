@@ -9,7 +9,7 @@ alwaysApply: true
 
 - Tests live in `apps/api/tests/`. Run them from **`apps/api/`**:
   - `uv run pytest tests/ -v`
-  - Or with PATH set (see below): `uv run pytest tests/ -v`
+  - Or with PATH set (see below): `ENV_FILE=.env.test uv run pytest tests/ -v`
 
 ## PATH for uv
 

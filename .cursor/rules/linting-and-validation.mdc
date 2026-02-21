@@ -11,7 +11,7 @@ After **any backend code change** (in `apps/api/` or its tests), follow this flo
 
 1. **Make code changes** (app code or tests).
 2. **Write tests** (unit and/or integration as needed).
-3. **Run and debug tests:** `uv run pytest tests/ -v` — fix until all pass; **fix any warnings** (e.g. deprecations) so test output is clean.
+3. **Run and debug tests:** `ENV_FILE=.env.test uv run pytest tests/ -v` — fix until all pass; **fix any warnings** (e.g. deprecations) so test output is clean.
 4. **Run lint and debug:**  
    - `uv run ruff check .`  
    - `uv run ruff format --check .` (or `uv run ruff format .` to fix)  

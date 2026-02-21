@@ -17,20 +17,20 @@ Backend for Expense Manager (FastAPI + PostgreSQL). See [doc/rfc-001-expense-man
    uv sync
    ```
 
-4. Copy `.env.example` to `.env` and set `DATABASE_URL` to your PostgreSQL (async: `postgresql+asyncpg://...`). With Docker Compose defaults, use:
-   ```
-   DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/expense_manager
-   TEST_DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/expense_manager_test
-   ```
+4. Env files (from `apps/api/`): `.env.local` and `.env.test` are provided; they are gitignored. Copy from `.env.example` if you need a base `.env`, or use:
+   - **Local app:** `ENV_FILE=.env.local uv run uvicorn app.main:app --reload`
+   - **Tests:** `ENV_FILE=.env.test uv run pytest tests/ -v`
+   `.env.local` points the app at `expense_manager`; `.env.test` points tests at `expense_manager_test` so they don’t touch the app DB.
 
-5. Run migrations:
+5. Run migrations (for both DBs if using separate test DB):
    ```bash
    uv run alembic upgrade head
+   DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/expense_manager_test uv run alembic upgrade head
    ```
 
 6. Start the API:
    ```bash
-   uv run uvicorn app.main:app --reload
+   ENV_FILE=.env.local uv run uvicorn app.main:app --reload
    ```
 
 - Health: `GET http://localhost:8000/health`
@@ -41,7 +41,7 @@ Backend for Expense Manager (FastAPI + PostgreSQL). See [doc/rfc-001-expense-man
 From `apps/api/`:
 
 ```bash
-uv run pytest
+ENV_FILE=.env.test uv run pytest tests/ -v
 ```
 
-Uses `TEST_DATABASE_URL` if set, otherwise `DATABASE_URL`. Ensure the database exists and migrations have been run (`uv run alembic upgrade head`).
+Uses `.env.test` (which sets `TEST_DATABASE_URL` to `expense_manager_test`). Ensure the test database exists and migrations have been run (see step 5 above).

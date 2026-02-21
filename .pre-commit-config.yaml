@@ -25,6 +25,6 @@ repos:
 
       - id: pytest
         name: pytest
-        entry: bash -c 'cd apps/api && uv run pytest tests/ -v'
+        entry: bash -c 'cd apps/api && ENV_FILE=.env.test uv run pytest tests/ -v'
         language: system
         pass_filenames: false

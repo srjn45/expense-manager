@@ -1,5 +1,11 @@
 """Pytest fixtures: test DB session, client with overridden get_db."""
 
+import os
+import subprocess
+
+# Enforce test env so pytest always uses .env.test (expense_manager_test DB)
+os.environ["ENV_FILE"] = ".env.test"
+
 from collections.abc import AsyncGenerator
 
 import pytest
@@ -24,6 +30,24 @@ def pytest_configure(config: pytest.Config) -> None:
 _settings = get_settings()
 _test_url = _settings.test_database_url or _settings.database_url
 _test_sync_url = _test_url.replace("postgresql+asyncpg://", "postgresql://", 1)
+
+
+def pytest_sessionstart(session: pytest.Session) -> None:
+    """Run Alembic migrations on the test DB before any tests so schema is up to date."""
+    api_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    env = os.environ.copy()
+    env["DATABASE_URL"] = _test_sync_url  # Alembic uses sync driver
+    result = subprocess.run(
+        ["uv", "run", "alembic", "upgrade", "head"],
+        cwd=api_root,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"Test DB migration failed (alembic upgrade head): {result.stderr or result.stdout}"
+        )
 
 
 @pytest.fixture(scope="session")
