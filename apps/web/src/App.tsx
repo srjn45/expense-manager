@@ -3,6 +3,7 @@ import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { AppShell } from '@/components/AppShell'
 import {
   CategoriesPage,
+  ChartsPage,
   CustomQueryPage,
   DashboardPage,
   HomePage,
@@ -28,6 +29,7 @@ function AppRoutes() {
         <Route path="payment-methods" element={<PaymentMethodsPage />} />
         <Route path="categories" element={<CategoriesPage />} />
         <Route path="custom-query" element={<CustomQueryPage />} />
+        <Route path="charts" element={<ChartsPage />} />
       </Route>
     </Routes>
   )

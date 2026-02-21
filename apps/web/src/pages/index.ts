@@ -1,4 +1,5 @@
 export { CategoriesPage } from './CategoriesPage'
+export { ChartsPage } from './ChartsPage'
 export { CustomQueryPage } from './CustomQueryPage'
 export { DashboardPage } from './DashboardPage'
 export { HomePage } from './HomePage'
