@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Category, PaymentMethod
 from app.services.analytics import (
+    get_custom_expense_by_tags,
     get_expense_by_category,
     get_expense_by_payment_method,
     get_monthly_expense,
@@ -430,3 +431,198 @@ async def test_get_expense_by_payment_method_only_in_month(
     assert result_jan == []
     assert len(result_feb) == 1
     assert result_feb[0]["amount"] == 100.0
+
+
+# --- get_custom_expense_by_tags ---
+
+
+async def test_get_custom_expense_by_tags_empty_tags_returns_zero(
+    db_session: AsyncSession,
+):
+    """get_custom_expense_by_tags with empty tag list returns 0."""
+    result = await get_custom_expense_by_tags(
+        db_session,
+        tags=[],
+        from_date=date(2025, 1, 1),
+        to_date=date(2025, 12, 31),
+    )
+    assert result == 0.0
+
+
+async def test_get_custom_expense_by_tags_no_matching_entries_returns_zero(
+    db_session: AsyncSession,
+    active_category: Category,
+    active_payment_method: PaymentMethod,
+):
+    """get_custom_expense_by_tags with no entries matching tags returns 0."""
+    await create_ledger_entry(
+        db_session,
+        date_=date(2025, 1, 15),
+        description="Lunch",
+        category_id=active_category.id,
+        payment_method_id=active_payment_method.id,
+        amount=Decimal("50"),
+        tags=["food"],
+    )
+    await db_session.flush()
+    result = await get_custom_expense_by_tags(
+        db_session,
+        tags=["travel"],
+        from_date=date(2025, 1, 1),
+        to_date=date(2025, 1, 31),
+    )
+    assert result == 0.0
+
+
+async def test_get_custom_expense_by_tags_filters_by_tags_and(
+    db_session: AsyncSession,
+    active_category: Category,
+    active_payment_method: PaymentMethod,
+):
+    """get_custom_expense_by_tags only includes entries that have ALL given tags (AND)."""
+    await create_ledger_entry(
+        db_session,
+        date_=date(2025, 1, 10),
+        description="A",
+        category_id=active_category.id,
+        payment_method_id=active_payment_method.id,
+        amount=Decimal("100"),
+        tags=["food", "lunch"],
+    )
+    await create_ledger_entry(
+        db_session,
+        date_=date(2025, 1, 20),
+        description="B",
+        category_id=active_category.id,
+        payment_method_id=active_payment_method.id,
+        amount=Decimal("50"),
+        tags=["food"],
+    )
+    await db_session.flush()
+    result_both = await get_custom_expense_by_tags(
+        db_session,
+        tags=["food", "lunch"],
+        from_date=date(2025, 1, 1),
+        to_date=date(2025, 1, 31),
+    )
+    result_one = await get_custom_expense_by_tags(
+        db_session,
+        tags=["food"],
+        from_date=date(2025, 1, 1),
+        to_date=date(2025, 1, 31),
+    )
+    assert result_both == 100.0
+    assert result_one == 150.0
+
+
+async def test_get_custom_expense_by_tags_date_range(
+    db_session: AsyncSession,
+    active_category: Category,
+    active_payment_method: PaymentMethod,
+):
+    """get_custom_expense_by_tags only includes entries within from/to (inclusive)."""
+    await create_ledger_entry(
+        db_session,
+        date_=date(2025, 1, 15),
+        description="In range",
+        category_id=active_category.id,
+        payment_method_id=active_payment_method.id,
+        amount=Decimal("30"),
+        tags=["x"],
+    )
+    await create_ledger_entry(
+        db_session,
+        date_=date(2025, 2, 15),
+        description="Feb",
+        category_id=active_category.id,
+        payment_method_id=active_payment_method.id,
+        amount=Decimal("20"),
+        tags=["x"],
+    )
+    await create_ledger_entry(
+        db_session,
+        date_=date(2025, 3, 15),
+        description="March",
+        category_id=active_category.id,
+        payment_method_id=active_payment_method.id,
+        amount=Decimal("10"),
+        tags=["x"],
+    )
+    await db_session.flush()
+    result = await get_custom_expense_by_tags(
+        db_session,
+        tags=["x"],
+        from_date=date(2025, 2, 1),
+        to_date=date(2025, 2, 28),
+    )
+    assert result == 20.0
+
+
+async def test_get_custom_expense_by_tags_sum_positive_only(
+    db_session: AsyncSession,
+    active_category: Category,
+    active_payment_method: PaymentMethod,
+):
+    """get_custom_expense_by_tags sums only positive amounts (expenses); negatives excluded."""
+    await create_ledger_entry(
+        db_session,
+        date_=date(2025, 1, 10),
+        description="Expense",
+        category_id=active_category.id,
+        payment_method_id=active_payment_method.id,
+        amount=Decimal("80"),
+        tags=["tag"],
+    )
+    await create_ledger_entry(
+        db_session,
+        date_=date(2025, 1, 20),
+        description="Refund",
+        category_id=active_category.id,
+        payment_method_id=active_payment_method.id,
+        amount=Decimal("-20"),
+        tags=["tag"],
+    )
+    await db_session.flush()
+    result = await get_custom_expense_by_tags(
+        db_session,
+        tags=["tag"],
+        from_date=date(2025, 1, 1),
+        to_date=date(2025, 1, 31),
+    )
+    assert result == 80.0
+
+
+async def test_get_custom_expense_by_tags_excludes_soft_deleted(
+    db_session: AsyncSession,
+    active_category: Category,
+    active_payment_method: PaymentMethod,
+):
+    """get_custom_expense_by_tags excludes entries with deleted_at set."""
+    await create_ledger_entry(
+        db_session,
+        date_=date(2025, 1, 10),
+        description="Kept",
+        category_id=active_category.id,
+        payment_method_id=active_payment_method.id,
+        amount=Decimal("40"),
+        tags=["a"],
+    )
+    entry, _, _, _ = await create_ledger_entry(
+        db_session,
+        date_=date(2025, 1, 20),
+        description="Deleted",
+        category_id=active_category.id,
+        payment_method_id=active_payment_method.id,
+        amount=Decimal("60"),
+        tags=["a"],
+    )
+    await db_session.flush()
+    entry.deleted_at = datetime.now(UTC)
+    await db_session.flush()
+    result = await get_custom_expense_by_tags(
+        db_session,
+        tags=["a"],
+        from_date=date(2025, 1, 1),
+        to_date=date(2025, 1, 31),
+    )
+    assert result == 40.0

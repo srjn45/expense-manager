@@ -10,6 +10,37 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import Category, LedgerEntry, PaymentMethod
 
 
+async def get_custom_expense_by_tags(
+    session: AsyncSession,
+    tags: list[str],
+    from_date: date,
+    to_date: date,
+) -> float:
+    """Sum of positive amounts for entries that have all given tags in date range.
+    Excludes soft-deleted entries. Returns totalExpense (0 if no matches).
+    """
+    if not tags:
+        return 0.0
+    total = func.coalesce(func.sum(LedgerEntry.amount), 0).label("total_expense")
+    q = (
+        select(total)
+        .select_from(LedgerEntry)
+        .where(
+            LedgerEntry.deleted_at.is_(None),
+            LedgerEntry.date >= from_date,
+            LedgerEntry.date <= to_date,
+            LedgerEntry.amount > 0,
+            LedgerEntry.tags.contains(tags),
+        )
+    )
+    result = await session.execute(q)
+    row = result.one()
+    value = row[0]
+    if value is None:
+        return 0.0
+    return float(value)
+
+
 async def get_monthly_expense(
     session: AsyncSession,
     from_date: date,

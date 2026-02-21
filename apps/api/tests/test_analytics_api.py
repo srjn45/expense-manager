@@ -293,3 +293,135 @@ async def test_get_expense_by_payment_method_422_invalid_month(client: AsyncClie
         "/api/v1/analytics/expense-by-payment-method?month=2025-13"
     )
     assert response2.status_code == 422
+
+
+# --- GET /analytics/custom-by-tags ---
+
+
+async def test_get_custom_by_tags_200_no_matching_entries(
+    client: AsyncClient,
+    one_active_category: Category,
+    one_active_payment_method: PaymentMethod,
+):
+    """GET custom-by-tags with no entries matching tags returns 200 and totalExpense 0."""
+    response = await client.get(
+        "/api/v1/analytics/custom-by-tags?tags=food,lunch&from=2025-01-01&to=2025-01-31"
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["totalExpense"] == 0.0
+
+
+async def test_get_custom_by_tags_200_matching_entries_correct_total(
+    client: AsyncClient,
+    one_active_category: Category,
+    one_active_payment_method: PaymentMethod,
+):
+    """GET custom-by-tags with matching entries returns correct totalExpense."""
+    await client.post(
+        "/api/v1/ledger-entries",
+        json={
+            **_valid_payload(
+                category_id=one_active_category.id,
+                payment_method_id=one_active_payment_method.id,
+                tags=["food", "lunch"],
+            ),
+            "date": "2025-02-10",
+            "description": "Lunch",
+            "amount": "50",
+        },
+    )
+    await client.post(
+        "/api/v1/ledger-entries",
+        json={
+            **_valid_payload(
+                category_id=one_active_category.id,
+                payment_method_id=one_active_payment_method.id,
+                tags=["food", "lunch"],
+            ),
+            "date": "2025-02-20",
+            "description": "Dinner",
+            "amount": "30",
+        },
+    )
+    await client.post(
+        "/api/v1/ledger-entries",
+        json={
+            **_valid_payload(
+                category_id=one_active_category.id,
+                payment_method_id=one_active_payment_method.id,
+                tags=["food"],
+            ),
+            "date": "2025-02-15",
+            "description": "Snack (only food tag)",
+            "amount": "10",
+        },
+    )
+    response = await client.get(
+        "/api/v1/analytics/custom-by-tags?tags=food,lunch&from=2025-02-01&to=2025-02-28"
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["totalExpense"] == 80.0
+
+
+async def test_get_custom_by_tags_422_missing_tags(client: AsyncClient):
+    """GET without tags returns 422."""
+    response = await client.get(
+        "/api/v1/analytics/custom-by-tags?from=2025-01-01&to=2025-01-31"
+    )
+    assert response.status_code == 422
+
+
+async def test_get_custom_by_tags_422_empty_tags(client: AsyncClient):
+    """GET with empty or whitespace-only tags returns 422."""
+    response = await client.get(
+        "/api/v1/analytics/custom-by-tags?tags=&from=2025-01-01&to=2025-01-31"
+    )
+    assert response.status_code == 422
+    response2 = await client.get(
+        "/api/v1/analytics/custom-by-tags?tags=%20%2C%20&from=2025-01-01&to=2025-01-31"
+    )
+    assert response2.status_code == 422
+
+
+async def test_get_custom_by_tags_422_missing_from(client: AsyncClient):
+    """GET without from returns 422."""
+    response = await client.get(
+        "/api/v1/analytics/custom-by-tags?tags=food&to=2025-01-31"
+    )
+    assert response.status_code == 422
+
+
+async def test_get_custom_by_tags_422_missing_to(client: AsyncClient):
+    """GET without to returns 422."""
+    response = await client.get(
+        "/api/v1/analytics/custom-by-tags?tags=food&from=2025-01-01"
+    )
+    assert response.status_code == 422
+
+
+async def test_get_custom_by_tags_422_invalid_date_format(client: AsyncClient):
+    """GET with invalid date format returns 422."""
+    response = await client.get(
+        "/api/v1/analytics/custom-by-tags?tags=food&from=not-a-date&to=2025-01-31"
+    )
+    assert response.status_code == 422
+
+
+async def test_get_custom_by_tags_422_from_after_to(client: AsyncClient):
+    """GET with from > to returns 422."""
+    response = await client.get(
+        "/api/v1/analytics/custom-by-tags?tags=food&from=2025-12-01&to=2025-01-01"
+    )
+    assert response.status_code == 422
+    assert "detail" in response.json()
+
+
+async def test_get_custom_by_tags_422_range_exceeds_max(client: AsyncClient):
+    """GET with date range > 366 days returns 422."""
+    response = await client.get(
+        "/api/v1/analytics/custom-by-tags?tags=food&from=2024-01-01&to=2025-12-31"
+    )
+    assert response.status_code == 422
+    assert "detail" in response.json()

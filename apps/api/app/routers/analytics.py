@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.deps import get_db
 from app.services.analytics import (
+    get_custom_expense_by_tags,
     get_expense_by_category,
     get_expense_by_payment_method,
     get_monthly_expense,
@@ -101,3 +102,55 @@ async def get_expense_by_payment_method_route(
         )
     data = await get_expense_by_payment_method(session, first_day)
     return {"data": data}
+
+
+def _parse_tags(tags_str: str) -> list[str]:
+    """Parse comma-separated tags; trim each; return non-empty list or raise ValueError."""
+    tag_list = [t.strip() for t in tags_str.split(",") if t.strip()]
+    if not tag_list:
+        raise ValueError("at least one tag is required")
+    return tag_list
+
+
+@router.get(
+    "/custom-by-tags",
+    status_code=status.HTTP_200_OK,
+    responses={
+        200: {
+            "description": "Total expense for entries matching all given tags in date range"
+        },
+        422: {
+            "description": "Validation error (missing tags/dates, invalid format, from > to, range > max)"
+        },
+    },
+)
+async def get_custom_expense_by_tags_route(
+    session: AsyncSession = Depends(get_db),
+    tags: str = Query(
+        ..., description="Comma-separated tags (AND); at least one required"
+    ),
+    from_: date = Query(..., alias="from", description="Start date (YYYY-MM-DD)"),
+    to: date = Query(..., description="End date (YYYY-MM-DD)"),
+) -> dict:
+    """Total expense (sum of positive amounts) for entries that have all given tags in range.
+    Excludes soft-deleted entries.
+    """
+    try:
+        tag_list = _parse_tags(tags)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(e),
+        )
+    if from_ > to:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="from must be less than or equal to to",
+        )
+    if (to - from_).days > MAX_RANGE_DAYS:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=f"Date range must not exceed {MAX_RANGE_DAYS} days",
+        )
+    total_expense = await get_custom_expense_by_tags(session, tag_list, from_, to)
+    return {"totalExpense": total_expense}
