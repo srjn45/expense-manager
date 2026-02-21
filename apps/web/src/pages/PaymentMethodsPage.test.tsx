@@ -28,7 +28,7 @@ describe('PaymentMethodsPage', () => {
     renderWithProviders(<PaymentMethodsPage />)
     expect(screen.getByRole('heading', { name: /payment methods/i })).toBeInTheDocument()
     expect(
-      screen.getByText(/add cards, cash, upi.*currency is set per method/i),
+      screen.getByText(/add cards, cash, upi.*currency is set per method/i)
     ).toBeInTheDocument()
   })
 
@@ -36,7 +36,7 @@ describe('PaymentMethodsPage', () => {
     mockApi.GET.mockResolvedValue({ data: { data: [] } } as never)
     renderWithProviders(<PaymentMethodsPage />)
     expect(
-      await screen.findByText(/no payment methods yet\. Add one to use when recording expenses/i),
+      await screen.findByText(/no payment methods yet\. Add one to use when recording expenses/i)
     ).toBeInTheDocument()
     const addButtons = screen.getAllByRole('button', { name: /add payment method/i })
     expect(addButtons.length).toBeGreaterThanOrEqual(1)

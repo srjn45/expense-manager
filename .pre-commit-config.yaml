@@ -1,6 +1,7 @@
 # Pre-commit: run from repo root. Install with: cd apps/api && uv run pre-commit install
 # Requires: uv on PATH (e.g. PATH="$HOME/.local/bin:$PATH")
 # API app lives in apps/api; hooks run lint and tests there.
+# Web app lives in apps/web; hooks run lint, format check, and tests there when apps/web files change.
 
 repos:
   - repo: local
@@ -28,3 +29,24 @@ repos:
         entry: bash -c 'cd apps/api && ENV_FILE=.env.test uv run pytest tests/ -v'
         language: system
         pass_filenames: false
+
+      - id: web-lint
+        name: web lint
+        entry: bash -c 'cd apps/web && npm run lint'
+        language: system
+        pass_filenames: false
+        files: ^apps/web/
+
+      - id: web-format
+        name: web format check
+        entry: bash -c 'cd apps/web && npm run format:check'
+        language: system
+        pass_filenames: false
+        files: ^apps/web/
+
+      - id: web-test
+        name: web test
+        entry: bash -c 'cd apps/web && npm run test'
+        language: system
+        pass_filenames: false
+        files: ^apps/web/

@@ -9,19 +9,29 @@ export function HomePage() {
       </p>
       <ul className="mt-4 list-inside list-disc space-y-1 text-gray-600">
         <li>
-          <Link to="/ledger" className="text-blue-600 hover:underline">Ledger</Link>
+          <Link to="/ledger" className="text-blue-600 hover:underline">
+            Ledger
+          </Link>
         </li>
         <li>
-          <Link to="/dashboard" className="text-blue-600 hover:underline">Dashboard</Link>
+          <Link to="/dashboard" className="text-blue-600 hover:underline">
+            Dashboard
+          </Link>
         </li>
         <li>
-          <Link to="/payment-methods" className="text-blue-600 hover:underline">Payment methods</Link>
+          <Link to="/payment-methods" className="text-blue-600 hover:underline">
+            Payment methods
+          </Link>
         </li>
         <li>
-          <Link to="/categories" className="text-blue-600 hover:underline">Categories</Link>
+          <Link to="/categories" className="text-blue-600 hover:underline">
+            Categories
+          </Link>
         </li>
         <li>
-          <Link to="/custom-query" className="text-blue-600 hover:underline">Custom query</Link>
+          <Link to="/custom-query" className="text-blue-600 hover:underline">
+            Custom query
+          </Link>
         </li>
       </ul>
     </div>

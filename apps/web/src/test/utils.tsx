@@ -15,16 +15,11 @@ function createTestQueryClient() {
 export function createWrapper() {
   const queryClient = createTestQueryClient()
   return function Wrapper({ children }: { children: React.ReactNode }) {
-    return (
-      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-    )
+    return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
   }
 }
 
-export function renderWithProviders(
-  ui: ReactElement,
-  options?: Omit<RenderOptions, 'wrapper'>,
-) {
+export function renderWithProviders(ui: ReactElement, options?: Omit<RenderOptions, 'wrapper'>) {
   const Wrapper = createWrapper()
   return render(ui, { wrapper: Wrapper, ...options })
 }

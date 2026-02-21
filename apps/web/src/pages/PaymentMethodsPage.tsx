@@ -323,8 +323,8 @@ export function PaymentMethodsPage() {
               Remove payment method?
             </h2>
             <p className="mt-2 text-sm text-gray-600">
-              Are you sure you want to remove this payment method? Existing ledger entries will
-              keep showing its name.
+              Are you sure you want to remove this payment method? Existing ledger entries will keep
+              showing its name.
             </p>
             <div className="mt-6 flex justify-end gap-2">
               <button

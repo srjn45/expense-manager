@@ -32,9 +32,7 @@ export function AppShell() {
             </NavLink>
           ))}
         </nav>
-        <div className="border-t border-gray-200 p-3 text-xs text-gray-500">
-          v0.1
-        </div>
+        <div className="border-t border-gray-200 p-3 text-xs text-gray-500">v0.1</div>
       </aside>
       <main className="flex-1 overflow-auto p-6">
         <Outlet />
