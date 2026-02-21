@@ -7,7 +7,13 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.deps import get_db
-from app.routers import categories, ledger_entries, payment_methods, tag_suggestions
+from app.routers import (
+    analytics,
+    categories,
+    ledger_entries,
+    payment_methods,
+    tag_suggestions,
+)
 
 
 @asynccontextmanager
@@ -21,6 +27,7 @@ app.include_router(payment_methods.router, prefix="/api/v1")
 app.include_router(categories.router, prefix="/api/v1")
 app.include_router(tag_suggestions.router, prefix="/api/v1")
 app.include_router(ledger_entries.router, prefix="/api/v1")
+app.include_router(analytics.router, prefix="/api/v1")
 
 
 @app.get("/health", include_in_schema=False)
