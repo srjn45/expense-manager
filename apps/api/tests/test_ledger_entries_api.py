@@ -894,3 +894,65 @@ async def test_put_ledger_entry_404_inactive_category(
     )
     assert response.status_code == 404
     assert "detail" in response.json()
+
+
+# --- DELETE /api/v1/ledger-entries/{id} ---
+
+
+async def test_delete_ledger_entry_200_success(
+    client: AsyncClient,
+    one_active_category: Category,
+    one_active_payment_method: PaymentMethod,
+):
+    """DELETE with existing id returns 200 and data; GET same id then returns 404."""
+    create_resp = await client.post(
+        "/api/v1/ledger-entries",
+        json=_valid_payload(
+            category_id=one_active_category.id,
+            payment_method_id=one_active_payment_method.id,
+        )
+        | {"description": "To delete"},
+    )
+    assert create_resp.status_code == 201
+    entry_id = create_resp.json()["data"]["id"]
+    response = await client.delete(f"/api/v1/ledger-entries/{entry_id}")
+    assert response.status_code == 200
+    body = response.json()
+    assert "data" in body
+    assert body["data"]["id"] == entry_id
+    get_resp = await client.get(f"/api/v1/ledger-entries/{entry_id}")
+    assert get_resp.status_code == 404
+
+
+async def test_delete_ledger_entry_200_idempotent(
+    client: AsyncClient,
+    one_active_category: Category,
+    one_active_payment_method: PaymentMethod,
+):
+    """DELETE on already-deleted entry returns 200 (idempotent)."""
+    create_resp = await client.post(
+        "/api/v1/ledger-entries",
+        json=_valid_payload(
+            category_id=one_active_category.id,
+            payment_method_id=one_active_payment_method.id,
+        ),
+    )
+    assert create_resp.status_code == 201
+    entry_id = create_resp.json()["data"]["id"]
+    await client.delete(f"/api/v1/ledger-entries/{entry_id}")
+    response2 = await client.delete(f"/api/v1/ledger-entries/{entry_id}")
+    assert response2.status_code == 200
+    assert response2.json()["data"]["id"] == entry_id
+
+
+async def test_delete_ledger_entry_404_not_found(client: AsyncClient):
+    """DELETE with non-existent id returns 404."""
+    response = await client.delete(f"/api/v1/ledger-entries/{uuid.uuid4()}")
+    assert response.status_code == 404
+    assert "detail" in response.json()
+
+
+async def test_delete_ledger_entry_422_invalid_uuid(client: AsyncClient):
+    """DELETE with invalid UUID returns 422."""
+    response = await client.delete("/api/v1/ledger-entries/not-a-uuid")
+    assert response.status_code == 422

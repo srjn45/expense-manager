@@ -14,6 +14,7 @@ from app.services.ledger_entry import (
     create_ledger_entry,
     get_ledger_entry,
     list_ledger_entries,
+    soft_delete_ledger_entry,
     update_ledger_entry,
 )
 from app.services.tag_suggestion import get_tag_suggestions
@@ -690,6 +691,68 @@ async def test_update_ledger_entry_payment_method_inactive(
             amount=entry.amount,
         )
     assert "Payment method" in exc_info.value.message
+
+
+# --- soft_delete_ledger_entry ---
+
+
+async def test_soft_delete_ledger_entry_sets_deleted_at(
+    db_session: AsyncSession,
+    active_category: Category,
+    active_payment_method: PaymentMethod,
+):
+    """soft_delete_ledger_entry sets deleted_at and returns entry with names."""
+    entry, _, _, _ = await create_ledger_entry(
+        db_session,
+        date_=date(2025, 1, 15),
+        description="To delete",
+        category_id=active_category.id,
+        payment_method_id=active_payment_method.id,
+        amount=Decimal("-1"),
+    )
+    await db_session.flush()
+    assert entry.deleted_at is None
+    result = await soft_delete_ledger_entry(db_session, entry.id)
+    assert result is not None
+    deleted_entry, cat_name, pm_name, currency = result
+    assert deleted_entry.id == entry.id
+    assert deleted_entry.deleted_at is not None
+    assert cat_name == "Food"
+    assert pm_name == "Card"
+    assert currency == "INR"
+    get_result = await get_ledger_entry(db_session, entry.id)
+    assert get_result is None
+
+
+async def test_soft_delete_ledger_entry_idempotent(
+    db_session: AsyncSession,
+    active_category: Category,
+    active_payment_method: PaymentMethod,
+):
+    """soft_delete_ledger_entry is idempotent: second call returns same success."""
+    entry, _, _, _ = await create_ledger_entry(
+        db_session,
+        date_=date(2025, 1, 15),
+        description="Entry",
+        category_id=active_category.id,
+        payment_method_id=active_payment_method.id,
+        amount=Decimal("-1"),
+    )
+    await db_session.flush()
+    result1 = await soft_delete_ledger_entry(db_session, entry.id)
+    assert result1 is not None
+    result2 = await soft_delete_ledger_entry(db_session, entry.id)
+    assert result2 is not None
+    assert result1[0].id == result2[0].id
+    assert result2[0].deleted_at is not None
+
+
+async def test_soft_delete_ledger_entry_returns_none_when_not_found(
+    db_session: AsyncSession,
+):
+    """soft_delete_ledger_entry returns None for non-existent id."""
+    result = await soft_delete_ledger_entry(db_session, uuid4())
+    assert result is None
 
 
 async def test_list_ledger_entries_invalid_cursor_returns_first_page(

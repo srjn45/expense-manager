@@ -1,8 +1,8 @@
-"""Ledger entry service: create, list (get, update, delete in later steps)."""
+"""Ledger entry service: create, list, get, update, soft delete."""
 
 import base64
 import json
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from uuid import UUID
 
@@ -149,6 +149,31 @@ async def update_ledger_entry(
         payment_method.name,
         payment_method.currency,
     )
+
+
+async def soft_delete_ledger_entry(
+    session: AsyncSession,
+    id: UUID,
+) -> tuple[LedgerEntry, str, str, str] | None:
+    """Soft delete a ledger entry (set deleted_at = now()). Idempotent: already-deleted
+    returns same success with entry data. Returns None only when id does not exist.
+    """
+    q = (
+        select(LedgerEntry, Category.name, PaymentMethod.name, PaymentMethod.currency)
+        .select_from(LedgerEntry)
+        .join(Category, LedgerEntry.category_id == Category.id)
+        .join(PaymentMethod, LedgerEntry.payment_method_id == PaymentMethod.id)
+        .where(LedgerEntry.id == id)
+    )
+    result = await session.execute(q)
+    row = result.one_or_none()
+    if row is None:
+        return None
+    entry, cat_name, pm_name, currency = row[0], row[1], row[2], row[3]
+    entry.deleted_at = datetime.now(UTC)
+    await session.flush()
+    await session.refresh(entry)
+    return (entry, cat_name, pm_name, currency)
 
 
 def _decode_cursor(cursor: str) -> tuple[date, UUID] | None:

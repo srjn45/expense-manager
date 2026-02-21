@@ -1,4 +1,4 @@
-"""Ledger entries API: POST, GET list, GET by id, PUT (delete in later steps)."""
+"""Ledger entries API: POST, GET list, GET by id, PUT, DELETE."""
 
 from datetime import date
 from typing import Literal
@@ -15,6 +15,7 @@ from app.services.ledger_entry import (
     create_ledger_entry,
     get_ledger_entry,
     list_ledger_entries,
+    soft_delete_ledger_entry,
     update_ledger_entry,
 )
 
@@ -154,6 +155,44 @@ async def put_ledger_entry(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=e.message,
         ) from e
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Ledger entry not found",
+        )
+    entry, category_name, payment_method_name, currency = row
+    payload = LedgerEntryResponse(
+        id=entry.id,
+        date=entry.date,
+        description=entry.description,
+        categoryId=entry.category_id,
+        categoryName=category_name,
+        paymentMethodId=entry.payment_method_id,
+        paymentMethodName=payment_method_name,
+        currency=currency,
+        amount=entry.amount,
+        tags=entry.tags,
+        created_at=entry.created_at,
+        updated_at=entry.updated_at,
+    ).model_dump(mode="json", by_alias=True)
+    return {"data": payload}
+
+
+@router.delete(
+    "/{id}",
+    status_code=status.HTTP_200_OK,
+    responses={
+        200: {"description": "Ledger entry soft-deleted"},
+        404: {"description": "Entry not found"},
+        422: {"description": "Invalid id format"},
+    },
+)
+async def delete_ledger_entry(
+    id: UUID,
+    session: AsyncSession = Depends(get_db),
+) -> dict:
+    """Soft delete a ledger entry (set deleted_at). Idempotent: already-deleted returns 200."""
+    row = await soft_delete_ledger_entry(session, id)
     if row is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
