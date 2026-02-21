@@ -51,10 +51,11 @@ function useDashboard(from: string, to: string) {
         params: { query: { from, to } },
       })
       if (res.error) {
-        const msg = res.error.detail != null ? String(res.error.detail) : 'Failed to load dashboard'
+        const detail = (res.error as { detail?: unknown }).detail
+        const msg = detail != null ? String(detail) : 'Failed to load dashboard'
         throw new Error(msg)
       }
-      const d = res.data as DashboardData
+      const d = res.data as unknown as DashboardData
       return {
         totalExpense: d.totalExpense ?? 0,
         totalRefund: d.totalRefund ?? 0,

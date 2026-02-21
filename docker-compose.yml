@@ -1,6 +1,8 @@
 # Test/local development environment for Expense Manager.
 # Start: docker compose up -d
 # Stop:  docker compose down
+#
+# Frontend is exposed on port 80; API is not exposed (nginx in frontend proxies /api to api service).
 
 services:
   postgres:
@@ -26,13 +28,23 @@ services:
       context: ./apps/api
       dockerfile: Dockerfile
     container_name: expense-manager-api
-    ports:
-      - "8000:8000"
     environment:
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/expense_manager
     depends_on:
       postgres:
         condition: service_healthy
+
+  frontend:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+    container_name: expense-manager-frontend
+    ports:
+      - "80:80"
+    environment:
+      API_BACKEND_URL: http://api:8000
+    depends_on:
+      - api
 
 volumes:
   postgres_data:

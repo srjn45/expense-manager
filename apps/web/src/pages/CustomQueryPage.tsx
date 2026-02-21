@@ -71,7 +71,7 @@ export function CustomQueryPage() {
         params: { query: { tags: tagsParam, from: values.from, to: values.to } },
       })
       if (res.error) {
-        const detail = res.error.detail
+        const detail = (res.error as { detail?: unknown }).detail
         const msg =
           typeof detail === 'string'
             ? detail

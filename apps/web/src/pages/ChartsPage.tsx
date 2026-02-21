@@ -83,8 +83,8 @@ function useMonthlyExpense(from: string, to: string) {
         params: { query: { from, to } },
       })
       if (res.error) {
-        const msg =
-          res.error.detail != null ? String(res.error.detail) : 'Failed to load monthly expense'
+        const detail = (res.error as { detail?: unknown }).detail
+        const msg = detail != null ? String(detail) : 'Failed to load monthly expense'
         throw new Error(msg)
       }
       const body = res.data as { data?: MonthlyDatum[] }
@@ -102,8 +102,8 @@ function useExpenseByCategory(month: string) {
         params: { query: { month } },
       })
       if (res.error) {
-        const msg =
-          res.error.detail != null ? String(res.error.detail) : 'Failed to load by category'
+        const detail = (res.error as { detail?: unknown }).detail
+        const msg = detail != null ? String(detail) : 'Failed to load by category'
         throw new Error(msg)
       }
       const body = res.data as { data?: CategoryDatum[] }
@@ -121,8 +121,8 @@ function useExpenseByPaymentMethod(month: string) {
         params: { query: { month } },
       })
       if (res.error) {
-        const msg =
-          res.error.detail != null ? String(res.error.detail) : 'Failed to load by payment method'
+        const detail = (res.error as { detail?: unknown }).detail
+        const msg = detail != null ? String(detail) : 'Failed to load by payment method'
         throw new Error(msg)
       }
       const body = res.data as { data?: PaymentMethodDatum[] }
@@ -285,7 +285,10 @@ export function ChartsPage() {
                           tickFormatter={(v) => formatCurrency(v)}
                         />
                         <Tooltip
-                          formatter={(value: number) => [formatCurrency(value), '']}
+                          formatter={(value: number | undefined) => [
+                            formatCurrency(value ?? 0),
+                            '',
+                          ]}
                           labelFormatter={(label) => `Month: ${label}`}
                           contentStyle={{
                             borderRadius: 8,
@@ -407,7 +410,10 @@ export function ChartsPage() {
                             axisLine={false}
                           />
                           <Tooltip
-                            formatter={(value: number) => [formatCurrency(value), 'Amount']}
+                            formatter={(value: number | undefined) => [
+                              formatCurrency(value ?? 0),
+                              'Amount',
+                            ]}
                             contentStyle={{
                               borderRadius: 8,
                               border: '1px solid #e5e7eb',
@@ -429,9 +435,10 @@ export function ChartsPage() {
                             cx="50%"
                             cy="50%"
                             outerRadius={100}
-                            label={({ categoryName, amount }) =>
-                              `${categoryName}: ${formatCurrency(amount)}`
-                            }
+                            label={(props) => {
+                              const entry = props as unknown as CategoryDatum
+                              return `${entry.categoryName}: ${formatCurrency(entry.amount)}`
+                            }}
                             labelLine={false}
                           >
                             {byCategory.data.map((_, i) => (
@@ -439,7 +446,7 @@ export function ChartsPage() {
                             ))}
                           </Pie>
                           <Tooltip
-                            formatter={(value: number) => formatCurrency(value)}
+                            formatter={(value: number | undefined) => formatCurrency(value ?? 0)}
                             contentStyle={{
                               borderRadius: 8,
                               border: '1px solid #e5e7eb',
@@ -546,7 +553,10 @@ export function ChartsPage() {
                             axisLine={false}
                           />
                           <Tooltip
-                            formatter={(value: number) => [formatCurrency(value), 'Amount']}
+                            formatter={(value: number | undefined) => [
+                              formatCurrency(value ?? 0),
+                              'Amount',
+                            ]}
                             contentStyle={{
                               borderRadius: 8,
                               border: '1px solid #e5e7eb',
@@ -568,9 +578,10 @@ export function ChartsPage() {
                             cx="50%"
                             cy="50%"
                             outerRadius={100}
-                            label={({ paymentMethodName, amount }) =>
-                              `${paymentMethodName}: ${formatCurrency(amount)}`
-                            }
+                            label={(props) => {
+                              const entry = props as unknown as PaymentMethodDatum
+                              return `${entry.paymentMethodName}: ${formatCurrency(entry.amount)}`
+                            }}
                             labelLine={false}
                           >
                             {byPayment.data.map((_, i) => (
@@ -578,7 +589,7 @@ export function ChartsPage() {
                             ))}
                           </Pie>
                           <Tooltip
-                            formatter={(value: number) => formatCurrency(value)}
+                            formatter={(value: number | undefined) => formatCurrency(value ?? 0)}
                             contentStyle={{
                               borderRadius: 8,
                               border: '1px solid #e5e7eb',
