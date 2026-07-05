@@ -32,16 +32,16 @@ light + dark). **Build screens only from the primitives** — do not restyle ad-
 
 Run from `apps/mobile/` (or `make -C apps/mobile <target>` from the repo root):
 
-| Command | What |
-|---|---|
-| `npm run start` / `make run` | Expo dev server (press `w` web, `a` Android, `i` iOS) |
-| `npm run web` / `make run-web` | Web (fastest dev loop) |
-| `npm run android` / `make run-android` | Android device/emulator |
-| `npm run lint` / `make lint` | ESLint |
-| `npm run typecheck` / `make typecheck` | `tsc --noEmit` |
-| `npm test` / `make test` | Jest |
-| `npm run db:generate` / `make db-generate` | Regenerate Drizzle migrations from the schema |
-| `npm run export:web` / `make build` | Static web export |
+| Command                                    | What                                                  |
+| ------------------------------------------ | ----------------------------------------------------- |
+| `npm run start` / `make run`               | Expo dev server (press `w` web, `a` Android, `i` iOS) |
+| `npm run web` / `make run-web`             | Web (fastest dev loop)                                |
+| `npm run android` / `make run-android`     | Android device/emulator                               |
+| `npm run lint` / `make lint`               | ESLint                                                |
+| `npm run typecheck` / `make typecheck`     | `tsc --noEmit`                                        |
+| `npm test` / `make test`                   | Jest                                                  |
+| `npm run db:generate` / `make db-generate` | Regenerate Drizzle migrations from the schema         |
+| `npm run export:web` / `make build`        | Static web export                                     |
 
 ## ⚠️ Web SQLite requires cross-origin isolation + a worker warm-up
 
