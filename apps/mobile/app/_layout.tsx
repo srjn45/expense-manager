@@ -1,0 +1,70 @@
+import '../global.css'
+
+import { useMigrations } from 'drizzle-orm/expo-sqlite/migrator'
+import { Stack } from 'expo-router'
+import { StatusBar } from 'expo-status-bar'
+import { useEffect, useState } from 'react'
+import { ActivityIndicator, Text, View } from 'react-native'
+import { GestureHandlerRootView } from 'react-native-gesture-handler'
+import { SafeAreaProvider } from 'react-native-safe-area-context'
+
+import { getDatabase, warmUpDatabaseAsync } from '@/db/client'
+import migrations from '@/db/migrations/migrations'
+import { useThemeColors } from '@/theme/useThemeColors'
+
+/** Full-screen gate shown while the DB boots or if it fails. */
+function Gate({ title, detail, busy }: { title: string; detail?: string; busy?: boolean }) {
+  const colors = useThemeColors()
+  return (
+    <View className="flex-1 items-center justify-center gap-3 bg-bg px-6">
+      {busy ? <ActivityIndicator color={colors.primary} /> : null}
+      <Text className="text-center text-lg font-semibold text-fg">{title}</Text>
+      {detail ? <Text className="text-center text-sm text-danger">{detail}</Text> : null}
+    </View>
+  )
+}
+
+/**
+ * Applies Drizzle migrations on boot (§3). Rendered only AFTER the DB worker is warm,
+ * so its synchronous ops are safe on web (see warmUpDatabaseAsync). Hook rules require
+ * useMigrations to be called unconditionally, hence this separate component.
+ */
+function MigratedApp() {
+  const { success, error } = useMigrations(getDatabase(), migrations)
+  if (error) return <Gate title="Database migration failed" detail={error.message} />
+  if (!success) return <Gate title="Preparing your data…" busy />
+  return <Stack screenOptions={{ headerShown: false }} />
+}
+
+export default function RootLayout() {
+  // On web, the SQLite worker must be booted asynchronously before any synchronous op
+  // (openDatabaseSync / migrations) runs — otherwise the first sync call times out.
+  // No-op on native, so `warm` flips true immediately there.
+  const [warm, setWarm] = useState(false)
+  const [warmError, setWarmError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let active = true
+    warmUpDatabaseAsync()
+      .then(() => active && setWarm(true))
+      .catch((e) => active && setWarmError(e instanceof Error ? e.message : String(e)))
+    return () => {
+      active = false
+    }
+  }, [])
+
+  return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <StatusBar style="auto" />
+        {warmError ? (
+          <Gate title="Could not open the database" detail={warmError} />
+        ) : !warm ? (
+          <Gate title="Starting…" busy />
+        ) : (
+          <MigratedApp />
+        )}
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
+  )
+}
