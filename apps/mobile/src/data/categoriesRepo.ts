@@ -35,6 +35,21 @@ export function listCategories(db: AppDatabase, options: ListCategoriesOptions =
   return rows.sort((a, b) => a.name.localeCompare(b.name))
 }
 
+/**
+ * The live-query builder for the categories LIST screen: ACTIVE categories only, ordered
+ * case-insensitively by name. Returned WITHOUT `.all()` so it can be handed to Drizzle's
+ * `useLiveQuery` for reactive, auto-re-rendering reads (§8 Phase 3) — screens never poll.
+ * Deactivated categories are excluded here (and thus from every picker); their names still
+ * resolve on old entries via {@link getCategoryById}, which ignores `active`.
+ */
+export function activeCategoriesQuery(db: AppDatabase) {
+  return db
+    .select()
+    .from(categories)
+    .where(eq(categories.active, 1))
+    .orderBy(sql`lower(${categories.name})`)
+}
+
 /** Fetch one category by id (regardless of active state), or undefined. */
 export function getCategoryById(db: AppDatabase, id: string): Category | undefined {
   return db.select().from(categories).where(eq(categories.id, id)).get()
@@ -136,6 +151,7 @@ export function reactivateCategory(db: AppDatabase, id: string): void {
 /** Grouped export mirroring the master-plan's `categoriesRepo` name. */
 export const categoriesRepo = {
   list: listCategories,
+  activeQuery: activeCategoriesQuery,
   getById: getCategoryById,
   findByName: findCategoryByName,
   create: createCategory,

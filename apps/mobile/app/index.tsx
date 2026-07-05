@@ -1,7 +1,8 @@
+import { router } from 'expo-router'
 import { useState } from 'react'
 import { Text, View } from 'react-native'
 
-import { AmountText, Card, Chip, FAB, Screen } from '@/components'
+import { AmountText, Button, Card, Chip, FAB, Screen } from '@/components'
 import { listCategories } from '@/data'
 import { getDatabase } from '@/db/client'
 
@@ -57,6 +58,19 @@ export default function HomeScreen() {
           <Chip label="transport" />
           <Chip label="Food" color="#F59E0B" />
         </View>
+      </Card>
+
+      {/* Entry point to Phase 3 Categories management. A later phase (Ledger, Phase 4)
+          owns the real navigation shell; this is the minimal, sensible way to reach it. */}
+      <Card className="gap-3">
+        <Text className="text-sm font-semibold text-fg">Manage</Text>
+        <Button
+          label="Categories"
+          variant="secondary"
+          fullWidth
+          onPress={() => router.push('/categories')}
+          testID="home-open-categories"
+        />
       </Card>
 
       <Text className="text-center text-xs text-muted">Your data stays on your device.</Text>

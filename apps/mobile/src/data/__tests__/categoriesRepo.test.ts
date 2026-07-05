@@ -1,7 +1,9 @@
 import {
+  activeCategoriesQuery,
   createCategory,
   deactivateCategory,
   findCategoryByName,
+  getCategoryById,
   listCategories,
   updateCategory,
 } from '@/data'
@@ -50,6 +52,24 @@ describe('categoriesRepo (§6.4)', () => {
     expect(listCategories(h.db)).toHaveLength(0)
     expect(listCategories(h.db, { includeInactive: true })).toHaveLength(1)
     expect(findCategoryByName(h.db, 'rent')?.id).toBe(cat.id)
+  })
+
+  it('getCategoryById resolves a DEACTIVATED category by id (old-entry name display, §8 DoD)', () => {
+    const cat = createCategory(h.db, { name: 'Rent' })
+    deactivateCategory(h.db, cat.id)
+    // A ledger entry referencing this id must still resolve its name after deactivation.
+    expect(getCategoryById(h.db, cat.id)).toMatchObject({ name: 'Rent', active: 0 })
+  })
+
+  it('activeCategoriesQuery returns ACTIVE only, ordered case-insensitively (live-list source)', () => {
+    createCategory(h.db, { name: 'banana' })
+    createCategory(h.db, { name: 'Apple' })
+    const cherry = createCategory(h.db, { name: 'Cherry' })
+    deactivateCategory(h.db, cherry.id)
+
+    const rows = activeCategoriesQuery(h.db).all()
+    // Cherry is deactivated → excluded from every picker; Apple before banana (case-insensitive).
+    expect(rows.map((c) => c.name)).toEqual(['Apple', 'banana'])
   })
 
   it('enforces case-insensitive uniqueness on rename', () => {
