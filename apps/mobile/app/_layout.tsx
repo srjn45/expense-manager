@@ -11,6 +11,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { getDatabase, warmUpDatabaseAsync } from '@/db/client'
 import migrations from '@/db/migrations/migrations'
 import { seedDatabase } from '@/db/seed'
+import { LockGate } from '@/features/lock'
 import { useThemeColors } from '@/theme/useThemeColors'
 
 /** Full-screen gate shown while the DB boots or if it fails. */
@@ -55,7 +56,13 @@ function MigratedApp() {
     return <Gate title="Could not prepare initial data" detail={seedState.error} />
   }
   if (!success || seedState === 'pending') return <Gate title="Preparing your data…" busy />
-  return <Stack screenOptions={{ headerShown: false }} />
+  // DB is warm + migrated + seeded here. The lock gate sits INSIDE this readiness gate, so
+  // the ordering is: DB ready → lock/unlock gate → the app's routes (§8).
+  return (
+    <LockGate>
+      <Stack screenOptions={{ headerShown: false }} />
+    </LockGate>
+  )
 }
 
 export default function RootLayout() {
