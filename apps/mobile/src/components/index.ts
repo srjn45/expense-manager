@@ -8,3 +8,8 @@ export { Chip, type ChipProps } from './Chip'
 export { FAB, type FABProps } from './FAB'
 export { AmountText, type AmountTextProps } from './AmountText'
 export { EmptyState, type EmptyStateProps } from './EmptyState'
+export {
+  ColorSwatchPicker,
+  type ColorSwatchPickerProps,
+  CATEGORY_SWATCHES,
+} from './ColorSwatchPicker'
