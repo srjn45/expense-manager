@@ -119,6 +119,23 @@ export function restoreEntry(db: AppDatabase, id: string): void {
   db.update(ledgerEntries).set({ deletedAt: null }).where(eq(ledgerEntries.id, id)).run()
 }
 
+/**
+ * A bounded Drizzle query over the (non-deleted) ledger, ordered newest-first, returned
+ * WITHOUT `.all()` so the ledger route can hand it to Drizzle's `useLiveQuery` as a reactive
+ * subscription (§8 Phase 4). It selects only ids and exists purely as the change *signal* on
+ * native — the screen reads the real windowed rows through {@link listEntries} (the single
+ * source of truth, §4), so both targets stay correct even where the WASM change-listener is
+ * silent. `limit` bounds the subscription cost (do not subscribe the whole ledger unbounded).
+ */
+export function ledgerLiveQuery(db: AppDatabase, limit = 200) {
+  return db
+    .select({ id: ledgerEntries.id })
+    .from(ledgerEntries)
+    .where(isNull(ledgerEntries.deletedAt))
+    .orderBy(sql`${ledgerEntries.occurredOn} DESC`, sql`${ledgerEntries.createdAt} DESC`)
+    .limit(limit)
+}
+
 export type ListEntriesFilters = {
   /** Restrict to one category. */
   categoryId?: string
@@ -228,5 +245,6 @@ export const entriesRepo = {
   softDelete: softDeleteEntry,
   restore: restoreEntry,
   list: listEntries,
+  liveQuery: ledgerLiveQuery,
   purgeDeleted: purgeDeletedEntries,
 }
