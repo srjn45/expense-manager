@@ -1,6 +1,7 @@
 # Pre-commit: run from repo root. Install with: cd apps/api && uv run pre-commit install
 # Requires: uv on PATH (e.g. PATH="$HOME/.local/bin:$PATH")
 # API hooks use: make -C apps/api <target>. Web hooks use: make -C apps/web <target>.
+# Mobile hooks use: make -C apps/mobile <target> (Expo app; apps/api is parked).
 
 repos:
   - repo: local
@@ -44,3 +45,31 @@ repos:
         language: system
         pass_filenames: false
         files: ^apps/web/
+
+      - id: mobile-format
+        name: Mobile fmt
+        entry: make -C apps/mobile format-check
+        language: system
+        pass_filenames: false
+        files: ^apps/mobile/
+
+      - id: mobile-lint
+        name: Mobile lint
+        entry: make -C apps/mobile lint
+        language: system
+        pass_filenames: false
+        files: ^apps/mobile/
+
+      - id: mobile-typecheck
+        name: Mobile typecheck
+        entry: make -C apps/mobile typecheck
+        language: system
+        pass_filenames: false
+        files: ^apps/mobile/
+
+      - id: mobile-test
+        name: Mobile test
+        entry: make -C apps/mobile test
+        language: system
+        pass_filenames: false
+        files: ^apps/mobile/

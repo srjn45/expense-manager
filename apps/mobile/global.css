@@ -1,0 +1,37 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Semantic design tokens as RGB channel triplets (space-separated so Tailwind's
+ * `<alpha-value>` works). Light values live in :root; dark values override under
+ * prefers-color-scheme. This is the single source of truth for class-based colors;
+ * src/theme/theme.ts mirrors these as hex for imperative styling.
+ */
+:root {
+  --color-bg: 247 248 250; /* #F7F8FA */
+  --color-surface: 255 255 255; /* #FFFFFF */
+  --color-surface-alt: 241 243 245; /* #F1F3F5 */
+  --color-border: 229 231 235; /* #E5E7EB */
+  --color-fg: 17 24 39; /* #111827 */
+  --color-muted: 107 114 128; /* #6B7280 */
+  --color-primary: 79 70 229; /* #4F46E5 */
+  --color-primary-fg: 255 255 255; /* #FFFFFF */
+  --color-danger: 220 38 38; /* #DC2626 */
+  --color-success: 22 163 74; /* #16A34A */
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: 11 15 20; /* #0B0F14 */
+    --color-surface: 21 26 33; /* #151A21 */
+    --color-surface-alt: 30 37 46; /* #1E252E */
+    --color-border: 42 50 60; /* #2A323C */
+    --color-fg: 243 244 246; /* #F3F4F6 */
+    --color-muted: 155 163 175; /* #9BA3AF */
+    --color-primary: 129 140 248; /* #818CF8 */
+    --color-primary-fg: 11 15 20; /* #0B0F14 */
+    --color-danger: 248 113 113; /* #F87171 */
+    --color-success: 74 222 128; /* #4ADE80 */
+  }
+}
