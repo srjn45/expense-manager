@@ -3,13 +3,14 @@ import '../global.css'
 import { useMigrations } from 'drizzle-orm/expo-sqlite/migrator'
 import { Stack } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ActivityIndicator, Text, View } from 'react-native'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 
 import { getDatabase, warmUpDatabaseAsync } from '@/db/client'
 import migrations from '@/db/migrations/migrations'
+import { seedDatabase } from '@/db/seed'
 import { useThemeColors } from '@/theme/useThemeColors'
 
 /** Full-screen gate shown while the DB boots or if it fails. */
@@ -31,8 +32,29 @@ function Gate({ title, detail, busy }: { title: string; detail?: string; busy?: 
  */
 function MigratedApp() {
   const { success, error } = useMigrations(getDatabase(), migrations)
+
+  // Seed once, after migrations have created the tables (§6.5). seedDatabase is idempotent,
+  // so it is safe on every boot; the ref avoids re-running each render. It runs in a
+  // microtask so its state updates land in callbacks (not synchronously in the effect), and
+  // we gate rendering on `seedState` so the first launch never flashes an unseeded DB.
+  const [seedState, setSeedState] = useState<'pending' | 'done' | { error: string }>('pending')
+  const seeded = useRef(false)
+  useEffect(() => {
+    if (!success || seeded.current) return
+    seeded.current = true
+    Promise.resolve()
+      .then(() => {
+        seedDatabase(getDatabase())
+        setSeedState('done')
+      })
+      .catch((e) => setSeedState({ error: e instanceof Error ? e.message : String(e) }))
+  }, [success])
+
   if (error) return <Gate title="Database migration failed" detail={error.message} />
-  if (!success) return <Gate title="Preparing your data…" busy />
+  if (typeof seedState === 'object') {
+    return <Gate title="Could not prepare initial data" detail={seedState.error} />
+  }
+  if (!success || seedState === 'pending') return <Gate title="Preparing your data…" busy />
   return <Stack screenOptions={{ headerShown: false }} />
 }
 

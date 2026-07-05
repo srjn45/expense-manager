@@ -43,6 +43,9 @@ let _db: DB | null = null
 export function getDatabase(): DB {
   if (!_db) {
     const sqlite = SQLite.openDatabaseSync(DATABASE_NAME)
+    // SQLite defaults foreign-key enforcement OFF — without this the §5 FKs (and the
+    // entry_tags ON DELETE CASCADE the purge relies on) are decorative. §8 Phase 1.
+    sqlite.execSync('PRAGMA foreign_keys = ON;')
     _db = drizzle(sqlite, { schema })
   }
   return _db
