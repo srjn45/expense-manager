@@ -5,9 +5,12 @@ export type CardProps = {
   children: ReactNode
   /** Makes the whole card tappable. */
   onPress?: () => void
+  /** Long-press handler (e.g. reveal row actions). Only active alongside `onPress`. */
+  onLongPress?: () => void
   /** Apply standard inner padding (16pt). Default true. */
   padded?: boolean
   accessibilityLabel?: string
+  accessibilityHint?: string
   className?: string
   testID?: string
 }
@@ -19,8 +22,10 @@ export type CardProps = {
 export function Card({
   children,
   onPress,
+  onLongPress,
   padded = true,
   accessibilityLabel,
+  accessibilityHint,
   className = '',
   testID,
 }: CardProps) {
@@ -32,8 +37,10 @@ export function Card({
     return (
       <Pressable
         onPress={onPress}
+        onLongPress={onLongPress}
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel}
+        accessibilityHint={accessibilityHint}
         testID={testID}
         style={({ pressed }) => ({ opacity: pressed ? 0.9 : 1 })}
         className={`${base} ${shadow} ${className}`}

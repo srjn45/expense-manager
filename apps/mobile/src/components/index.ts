@@ -9,6 +9,13 @@ export { FAB, type FABProps } from './FAB'
 export { AmountText, type AmountTextProps } from './AmountText'
 export { EmptyState, type EmptyStateProps } from './EmptyState'
 export {
+  SegmentedControl,
+  type SegmentedControlProps,
+  type Segment,
+  type SegmentTone,
+} from './SegmentedControl'
+export { Snackbar, type SnackbarProps } from './Snackbar'
+export {
   ColorSwatchPicker,
   type ColorSwatchPickerProps,
   CATEGORY_SWATCHES,
