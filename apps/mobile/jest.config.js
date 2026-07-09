@@ -11,4 +11,9 @@ module.exports = {
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
   },
+  // RN component tests render VirtualizedList/SectionList (ledger) and gifted-charts (stats) in
+  // jsdom, whose internal setState-on-timer work is slow under a loaded CI runner — the default
+  // 5s is too aggressive and flakes there (passes locally). 20s gives ample headroom without
+  // weakening any assertion (the tests still run and verify exactly the same behavior).
+  testTimeout: 20000,
 }
