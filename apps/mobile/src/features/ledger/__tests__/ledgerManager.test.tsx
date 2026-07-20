@@ -184,13 +184,24 @@ describe('LedgerManager (§8 Phase 4 — the core)', () => {
     expect(listEntries(h.db)[0].tags).toEqual(['espresso'])
   })
 
-  it('blocks spaces in a tag with an inline hint (§6.2)', () => {
+  it('converts a typed space into a tag chip and keeps typing the next one (§6.2)', () => {
     const view = renderLedger(<Harness db={h.db} />)
     fireEvent.press(view.getByTestId('ledger-add-fab'))
     fireEvent.press(view.getByTestId('entry-more-toggle'))
 
     fireEvent.changeText(view.getByTestId('tag-text-input'), 'week end')
-    expect(view.getByText(/cannot contain spaces/i)).toBeTruthy()
+    expect(view.getByTestId('tag-chip-week')).toBeTruthy()
+    expect(view.getByTestId('tag-text-input').props.value).toBe('end')
+  })
+
+  it('converts a typed comma into a tag chip (§6.2)', () => {
+    const view = renderLedger(<Harness db={h.db} />)
+    fireEvent.press(view.getByTestId('ledger-add-fab'))
+    fireEvent.press(view.getByTestId('entry-more-toggle'))
+
+    fireEvent.changeText(view.getByTestId('tag-text-input'), 'coffee,')
+    expect(view.getByTestId('tag-chip-coffee')).toBeTruthy()
+    expect(view.getByTestId('tag-text-input').props.value).toBe('')
   })
 
   it('renders a correct per-day section total for multiple same-day entries', () => {

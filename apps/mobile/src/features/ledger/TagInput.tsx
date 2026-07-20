@@ -15,10 +15,14 @@ export type TagInputProps = {
   testID?: string
 }
 
+/** Space or comma — either commits the token typed so far into a tag chip (§6.2). */
+const DELIMITER_RE = /[\s,]/
+
 /**
  * Tag entry (§6.2 / §7.7): chips with an inline "×", type-ahead suggestions from
- * `tag_suggestions`, and a gentle inline hint when a space is typed (spaces are BLOCKED for
- * MVP clarity, not silently converted). Adding a tag on submit or by tapping a suggestion.
+ * `tag_suggestions`, and multi-tag entry — typing a space or comma converts whatever was
+ * typed so far into a tag chip and starts a fresh one. Also supports submit-to-add and
+ * tapping a suggestion.
  */
 export function TagInput({ db, value, onChange, label = 'Tags', testID }: TagInputProps) {
   const [text, setText] = useState('')
@@ -55,15 +59,41 @@ export function TagInput({ db, value, onChange, label = 'Tags', testID }: TagInp
     setHint(undefined)
   }
 
+  /** Commit each non-empty token as a tag (accumulating locally so a multi-token paste,
+   * e.g. "a, b, c", doesn't drop tokens to a stale `value` closure). */
+  function commitTokens(tokens: string[]) {
+    let current = value
+    let lastHint: string | undefined
+    for (const raw of tokens) {
+      const result = validateTag(raw)
+      if (!result.ok) {
+        lastHint = result.error.message
+        continue
+      }
+      if (current.includes(result.tag)) continue
+      if (current.length >= MAX_TAGS_PER_ENTRY) {
+        lastHint = `At most ${MAX_TAGS_PER_ENTRY} tags.`
+        break
+      }
+      current = [...current, result.tag]
+    }
+    if (current !== value) onChange(current)
+    setHint(lastHint)
+  }
+
   function handleChangeText(next: string) {
-    // Block spaces inline with a gentle hint rather than silently rewriting them (§6.2).
-    if (/\s/.test(next)) {
-      setHint('Tags cannot contain spaces — use a dash instead.')
-      setText(next.replace(/\s/g, ''))
+    const endsWithDelimiter = DELIMITER_RE.test(next.slice(-1))
+    const tokens = next.split(DELIMITER_RE).filter((t) => t.length > 0)
+    if (endsWithDelimiter) {
+      if (tokens.length > 0) commitTokens(tokens)
+      setText('')
       return
     }
-    setHint(undefined)
-    setText(next)
+    // The last token is still being typed — commit everything before it, keep it live.
+    const pending = tokens.pop() ?? ''
+    if (tokens.length > 0) commitTokens(tokens)
+    else setHint(undefined)
+    setText(pending)
   }
 
   function removeTag(tag: string) {
@@ -90,14 +120,14 @@ export function TagInput({ db, value, onChange, label = 'Tags', testID }: TagInp
         value={text}
         onChangeText={handleChangeText}
         onSubmitEditing={() => addTag(text)}
-        placeholder={atLimit ? 'Tag limit reached' : 'Add a tag and press enter'}
+        placeholder={atLimit ? 'Tag limit reached' : 'Type a tag, then space or comma'}
         editable={!atLimit}
         autoCapitalize="none"
         autoCorrect={false}
         returnKeyType="done"
         blurOnSubmit={false}
         error={hint}
-        hint={atLimit ? undefined : 'No spaces. Tags help you filter later.'}
+        hint={atLimit ? undefined : 'Space or comma turns it into a tag.'}
         accessibilityLabel="Add tag"
         testID="tag-text-input"
       />

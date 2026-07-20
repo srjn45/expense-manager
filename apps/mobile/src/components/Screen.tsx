@@ -1,5 +1,5 @@
 import { type ReactNode } from 'react'
-import { ScrollView, View } from 'react-native'
+import { KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 export type ScreenProps = {
@@ -42,13 +42,21 @@ export function Screen({
   if (scroll) {
     return (
       <View className={`flex-1 bg-bg ${className}`} style={safeArea} testID={testID}>
-        <ScrollView
+        {/* Keeps the focused field above the keyboard — without this, fields near the
+            bottom of a form (e.g. Save/Delete, or Tags/Note under "More") end up hidden
+            behind the keyboard on both iOS and Android. */}
+        <KeyboardAvoidingView
           className="flex-1"
-          contentContainerClassName={`${pad} ${contentClassName}`}
-          keyboardShouldPersistTaps="handled"
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
-          {children}
-        </ScrollView>
+          <ScrollView
+            className="flex-1"
+            contentContainerClassName={`${pad} ${contentClassName}`}
+            keyboardShouldPersistTaps="handled"
+          >
+            {children}
+          </ScrollView>
+        </KeyboardAvoidingView>
       </View>
     )
   }

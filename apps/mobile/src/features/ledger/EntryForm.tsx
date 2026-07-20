@@ -3,12 +3,13 @@ import { useState } from 'react'
 import { Controller, useForm, useWatch } from 'react-hook-form'
 import { Pressable, Text, View } from 'react-native'
 
-import { AmountText, Button, Input, SegmentedControl } from '@/components'
+import { AmountText, Button, DatePickerField, Input, SegmentedControl } from '@/components'
 import { parseAmountInput, todayISO } from '@/domain'
 import type { Category } from '@/db/schema'
 import type { AppDatabase } from '@/data'
 
 import { CategoryPicker } from './CategoryPicker'
+import { CurrencyPicker } from './CurrencyPicker'
 import { TagInput } from './TagInput'
 import { entryFormSchema, type EntryFormValues } from './entryForm'
 
@@ -165,6 +166,19 @@ export function EntryForm({
             />
           </View>
         ) : null}
+
+        <Controller
+          control={control}
+          name="currency"
+          render={({ field }) => (
+            <CurrencyPicker
+              value={field.value}
+              onChange={field.onChange}
+              error={errors.currency?.message}
+              testID="entry-currency"
+            />
+          )}
+        />
       </View>
 
       <Controller
@@ -186,18 +200,14 @@ export function EntryForm({
         name="occurredOn"
         render={({ field }) => (
           <View className="gap-2">
-            <Input
+            <DatePickerField
               label="Date"
               value={field.value}
-              onChangeText={field.onChange}
+              onChange={field.onChange}
               onBlur={field.onBlur}
-              placeholder="YYYY-MM-DD"
-              autoCapitalize="none"
-              autoCorrect={false}
               editable={!busy}
               error={errors.occurredOn?.message}
-              hint="Local calendar date. Defaults to today."
-              accessibilityLabel="Date"
+              hint="Local calendar date. Type it or tap 📅 to pick."
               testID="entry-date-input"
             />
             <Button

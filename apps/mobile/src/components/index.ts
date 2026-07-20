@@ -20,3 +20,5 @@ export {
   type ColorSwatchPickerProps,
   CATEGORY_SWATCHES,
 } from './ColorSwatchPicker'
+export { CalendarModal, type CalendarModalProps } from './CalendarModal'
+export { DatePickerField, type DatePickerFieldProps } from './DatePickerField'

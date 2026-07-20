@@ -9,6 +9,7 @@ import {
   restoreEntry,
   softDeleteEntry,
   updateEntry,
+  updateSettings,
   type AppDatabase,
   type EntryWithTags,
 } from '@/data'
@@ -120,17 +121,32 @@ export function LedgerManager({
     setSubmitError(undefined)
   }
 
+  // Remember the currency just used as the default for the NEXT new entry (§7.3 "default is
+  // the last used currency") — the app_settings default is repurposed as a rolling "last
+  // used" value. Best-effort: the entry is already saved by the time this runs, so a failure
+  // here (e.g. a settings row that hasn't been seeded yet) must never surface as a save error.
+  function rememberLastCurrency(currency: string) {
+    if (currency === defaultCurrency) return
+    try {
+      updateSettings(db, { defaultCurrency: currency })
+    } catch {
+      // Non-critical — ignore.
+    }
+  }
+
   async function handleSubmit(values: EntryFormValues) {
     setBusy(true)
     setSubmitError(undefined)
     try {
       if (view.mode === 'add') {
         createEntry(db, formToEntryInput(values))
+        rememberLastCurrency(values.currency)
         onChanged?.()
         backToList()
         showSnackbar({ message: 'Expense added.' })
       } else if (view.mode === 'edit') {
         updateEntry(db, view.entry.id, formToEntryInput(values))
+        rememberLastCurrency(values.currency)
         onChanged?.()
         backToList()
         showSnackbar({ message: 'Changes saved.' })

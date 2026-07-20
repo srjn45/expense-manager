@@ -42,6 +42,29 @@ export function normalizeCurrency(currency: string): string {
   return currency.trim().toUpperCase()
 }
 
+/**
+ * A curated set of commonly-used currencies for the per-transaction picker (§7.3). Any
+ * 3-letter ISO 4217 code is still valid input (see `currencySchema`) — this list is just a
+ * friendly shortlist; the picker also shows the entry's current currency even if it isn't
+ * one of these.
+ */
+export const COMMON_CURRENCIES = [
+  { code: 'INR', name: 'Indian Rupee' },
+  { code: 'USD', name: 'US Dollar' },
+  { code: 'EUR', name: 'Euro' },
+  { code: 'GBP', name: 'British Pound' },
+  { code: 'JPY', name: 'Japanese Yen' },
+  { code: 'AUD', name: 'Australian Dollar' },
+  { code: 'CAD', name: 'Canadian Dollar' },
+  { code: 'SGD', name: 'Singapore Dollar' },
+  { code: 'AED', name: 'UAE Dirham' },
+  { code: 'CNY', name: 'Chinese Yuan' },
+  { code: 'CHF', name: 'Swiss Franc' },
+  { code: 'HKD', name: 'Hong Kong Dollar' },
+  { code: 'THB', name: 'Thai Baht' },
+  { code: 'MYR', name: 'Malaysian Ringgit' },
+] as const satisfies readonly { code: string; name: string }[]
+
 /** Number of minor units per major unit for a currency (e.g. INR→2, JPY→0, KWD→3). */
 export function minorUnitExponent(currency: string): number {
   return MINOR_UNIT_EXPONENTS[normalizeCurrency(currency)] ?? DEFAULT_EXPONENT
