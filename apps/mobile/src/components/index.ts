@@ -22,3 +22,4 @@ export {
 } from './ColorSwatchPicker'
 export { CalendarModal, type CalendarModalProps } from './CalendarModal'
 export { DatePickerField, type DatePickerFieldProps } from './DatePickerField'
+export { SelectField, type SelectFieldProps, type SelectOption } from './SelectField'

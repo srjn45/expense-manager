@@ -174,6 +174,7 @@ export function EntryForm({
             <CurrencyPicker
               value={field.value}
               onChange={field.onChange}
+              editable={!busy}
               error={errors.currency?.message}
               testID="entry-currency"
             />

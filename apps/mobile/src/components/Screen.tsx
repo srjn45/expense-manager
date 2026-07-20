@@ -44,14 +44,20 @@ export function Screen({
       <View className={`flex-1 bg-bg ${className}`} style={safeArea} testID={testID}>
         {/* Keeps the focused field above the keyboard — without this, fields near the
             bottom of a form (e.g. Save/Delete, or Tags/Note under "More") end up hidden
-            behind the keyboard on both iOS and Android. */}
+            behind the keyboard. iOS has no native resize behavior, so KeyboardAvoidingView
+            does the work there; Android already resizes the window itself (app.json sets
+            `android.softwareKeyboardLayoutMode: "resize"`), so layering "height"/"padding"
+            behavior on top of that double-compensates and the ScrollView doesn't reliably
+            settle back down where the focused field actually is — leave it a no-op there.
+            The extra bottom padding gives ScrollView's built-in scroll-to-focused-input
+            room to bring even the last field fully clear of the keyboard. */}
         <KeyboardAvoidingView
           className="flex-1"
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
           <ScrollView
             className="flex-1"
-            contentContainerClassName={`${pad} ${contentClassName}`}
+            contentContainerClassName={`${pad} pb-24 ${contentClassName}`}
             keyboardShouldPersistTaps="handled"
           >
             {children}

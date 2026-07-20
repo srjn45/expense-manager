@@ -285,10 +285,28 @@ function dedupeNormalized(tags: readonly string[]): string[] {
   return [...seen]
 }
 
+/**
+ * Distinct currencies among non-deleted entries, most-used first (ties broken alphabetically) —
+ * drives the stats screen's top-level currency selector so a traveller with entries in several
+ * currencies can switch which one's aggregates they're viewing (no conversion, same MVP stance
+ * as the rest of this file).
+ */
+export function listCurrencies(db: AppDatabase): string[] {
+  const rows = db.all<{ currency: string }>(
+    sql`SELECT ${ledgerEntries.currency} AS "currency"
+          FROM ${ledgerEntries}
+          WHERE ${scopeWhere()}
+          GROUP BY ${ledgerEntries.currency}
+          ORDER BY COUNT(*) DESC, ${ledgerEntries.currency} ASC`
+  )
+  return rows.map((r) => r.currency)
+}
+
 /** Grouped export mirroring the other repos' naming (§4). */
 export const statsRepo = {
   monthSummary,
   monthlySpendSeries,
   categoryBreakdown,
   tagRangeTotal,
+  listCurrencies,
 }

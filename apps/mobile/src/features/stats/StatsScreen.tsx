@@ -4,7 +4,7 @@ import { useCallback, useReducer } from 'react'
 import { Pressable, Text } from 'react-native'
 
 import { Screen } from '@/components'
-import { getSettings, ledgerLiveQuery, listEntries } from '@/data'
+import { getSettings, ledgerLiveQuery, listCurrencies, listEntries } from '@/data'
 import { getDatabase } from '@/db/client'
 import { todayISO } from '@/domain'
 
@@ -30,6 +30,10 @@ export function StatsScreen() {
   useFocusEffect(useCallback(() => refresh(), []))
 
   const defaultCurrency = getSettings(db)?.defaultCurrency ?? 'INR'
+  const currencies = listCurrencies(db)
+  const initialCurrency = currencies.includes(defaultCurrency)
+    ? defaultCurrency
+    : (currencies[0] ?? defaultCurrency)
   const hasAnyEntries = listEntries(db, { limit: 1 }).length > 0
 
   return (
@@ -48,7 +52,8 @@ export function StatsScreen() {
 
       <StatsManager
         db={db}
-        currency={defaultCurrency}
+        currencies={currencies}
+        initialCurrency={initialCurrency}
         today={todayISO()}
         hasAnyEntries={hasAnyEntries}
         onOpenLedger={() => router.back()}

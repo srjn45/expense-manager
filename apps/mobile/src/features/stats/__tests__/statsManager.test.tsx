@@ -81,7 +81,13 @@ describe('StatsManager (§7.6 / §8 Phase 6)', () => {
 
   function renderManager(hasAnyEntries = true) {
     return render(
-      <StatsManager db={h.db} currency="INR" today={TODAY} hasAnyEntries={hasAnyEntries} />
+      <StatsManager
+        db={h.db}
+        currencies={['INR', 'USD']}
+        initialCurrency="INR"
+        today={TODAY}
+        hasAnyEntries={hasAnyEntries}
+      />
     )
   }
 
@@ -124,6 +130,31 @@ describe('StatsManager (§7.6 / §8 Phase 6)', () => {
     expect(view.getByTestId('stats-category-empty')).toBeTruthy()
     // Now the future (July) is navigable again.
     expect(view.getByTestId('stats-next-month').props.accessibilityState.disabled).toBe(false)
+  })
+
+  it('shows a currency selector and switches aggregates when a traveller has multiple currencies', () => {
+    const view = renderManager()
+    // Defaults to the initial currency (INR); the USD entry is excluded from the summary.
+    expect(view.getByTestId('stats-count-value').props.children).toBe(4)
+
+    fireEvent.press(view.getByTestId('stats-currency'))
+    fireEvent.press(view.getByTestId('stats-currency-option-USD'))
+
+    // Switched to USD: the single USD "Trip" debit is now counted, INR entries excluded.
+    expect(view.getByTestId('stats-count-value').props.children).toBe(1)
+  })
+
+  it('hides the currency selector when every entry is in the same currency', () => {
+    const view = render(
+      <StatsManager
+        db={h.db}
+        currencies={['INR']}
+        initialCurrency="INR"
+        today={TODAY}
+        hasAnyEntries
+      />
+    )
+    expect(view.queryByTestId('stats-currency')).toBeNull()
   })
 
   it('totals expenses by tag over a date range (multi-tag AND)', async () => {
