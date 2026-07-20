@@ -25,7 +25,7 @@
  *   - tags        tags joined with "|" (the {@link CSV_TAG_DELIMITER})
  *   - description optional note
  */
-import { eq, sql } from 'drizzle-orm'
+import { eq, isNull, sql } from 'drizzle-orm'
 
 import {
   BACKUP_APP_ID,
@@ -288,8 +288,10 @@ export type CsvRowError = { row: number; reason: string }
 export type CsvImportReport = {
   /** Rows written successfully. */
   imported: number
-  /** Rows rejected (with reasons in {@link errors}). */
+  /** Rows rejected as invalid (with reasons in {@link errors}). */
   skipped: number
+  /** Rows skipped because an identical entry already exists (date+title+amount+currency). */
+  duplicates: number
   /** Data rows considered (excludes the header and fully-blank rows). */
   total: number
   /** Per-row failure detail for the visible success/skip summary (§8 Phase 7 DoD). */
@@ -301,6 +303,28 @@ export type ImportCsvOptions = {
   defaultCurrency: string
   /** Category name used when a row's `category` cell is blank. Default 'Miscellaneous'. */
   fallbackCategory?: string
+}
+
+/**
+ * Content identity used to skip re-imported duplicates: `date + title + amount + currency`.
+ * Category is deliberately EXCLUDED — it is a mutable classification, not part of a
+ * transaction's identity, so re-importing after a category-mapping change still matches.
+ * Title is compared case-insensitively and currency case-folded (ISO codes are case-blind);
+ * amount is the signed minor-unit integer. Fields are joined on NUL to avoid cross-field
+ * collisions.
+ */
+function entryDedupKey(
+  occurredOn: string,
+  title: string,
+  amountMinor: number,
+  currency: string
+): string {
+  return [
+    occurredOn.trim(),
+    title.trim().toLowerCase(),
+    String(amountMinor),
+    currency.trim().toUpperCase(),
+  ].join(' ')
 }
 
 /** Find-or-create a category by name (case-insensitive), reactivating an inactive match (§6.4). */
@@ -319,13 +343,17 @@ function ensureCategory(db: AppDatabase, name: string): string {
  * and returns a per-row success/skip report instead of silently dropping bad rows. Each good
  * row is committed independently (createEntry opens its own transaction), so one bad row never
  * rolls back the rows around it. Throws only when the header itself is unusable.
+ *
+ * Idempotent: a row whose `date+title+amount+currency` already matches a LIVE entry (or an
+ * earlier row in the same file) is skipped and counted under `duplicates` — re-importing the
+ * same file adds nothing. See {@link entryDedupKey} for the exact identity rule.
  */
 export function importEntriesCsv(
   db: AppDatabase,
   csvText: string,
   options: ImportCsvOptions
 ): CsvImportReport {
-  const report: CsvImportReport = { imported: 0, skipped: 0, total: 0, errors: [] }
+  const report: CsvImportReport = { imported: 0, skipped: 0, duplicates: 0, total: 0, errors: [] }
   const matrix = parseCsv(csvText)
   // Empty / whitespace-only file → nothing to do (not an error).
   if (!matrix.some((row) => row.some((cell) => cell.trim() !== ''))) return report
@@ -349,6 +377,23 @@ export function importEntriesCsv(
 
   const fallbackCategory = options.fallbackCategory ?? 'Miscellaneous'
   const dataRows = matrix.slice(1)
+
+  // Dedup set seeded from existing LIVE entries (soft-deleted rows are intentionally ignored,
+  // so a re-import never silently resurrects or re-skips something the user deleted). Keys of
+  // rows we write are added as we go, so duplicates WITHIN a single file are caught too.
+  const seenKeys = new Set<string>()
+  for (const e of db
+    .select({
+      occurredOn: ledgerEntries.occurredOn,
+      title: ledgerEntries.title,
+      amountMinor: ledgerEntries.amountMinor,
+      currency: ledgerEntries.currency,
+    })
+    .from(ledgerEntries)
+    .where(isNull(ledgerEntries.deletedAt))
+    .all()) {
+    seenKeys.add(entryDedupKey(e.occurredOn, e.title, e.amountMinor, e.currency))
+  }
 
   for (let i = 0; i < dataRows.length; i++) {
     const rowNum = i + 2 // 1-based, +1 for the header row
@@ -376,6 +421,13 @@ export function importEntriesCsv(
       if (amountMinor === null) {
         throw new Error(amountCell ? `invalid amount "${amountCell}"` : 'missing amount')
       }
+      // Skip rows identical (date+title+amount+currency) to an existing or already-imported
+      // entry, so re-importing the same file is idempotent and never duplicates.
+      const dedupKey = entryDedupKey(date, title, amountMinor, currency)
+      if (seenKeys.has(dedupKey)) {
+        report.duplicates++
+        continue
+      }
       const categoryId = ensureCategory(db, categoryName || fallbackCategory)
       createEntry(db, {
         title,
@@ -386,6 +438,7 @@ export function importEntriesCsv(
         occurredOn: date,
         tags: parseCsvTags(tagsCell),
       })
+      seenKeys.add(dedupKey)
       report.imported++
     } catch (e) {
       report.skipped++
