@@ -285,6 +285,9 @@ export function SettingsManager({
         <Card className="gap-2 border-primary" testID="settings-import-report">
           <Text className="text-base font-semibold text-fg">
             {notice.report.imported} imported
+            {notice.report.duplicates > 0
+              ? `, ${notice.report.duplicates} duplicate${notice.report.duplicates === 1 ? '' : 's'} skipped`
+              : ''}
             {notice.report.skipped > 0 ? `, ${notice.report.skipped} skipped` : ''}
           </Text>
           {notice.report.errors.length > 0 ? (

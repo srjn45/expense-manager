@@ -360,15 +360,66 @@ describe('CSV import (legacy data path, §8 Phase 7)', () => {
     expect(importEntriesCsv(h.db, '', opts)).toEqual({
       imported: 0,
       skipped: 0,
+      duplicates: 0,
       total: 0,
       errors: [],
     })
     expect(importEntriesCsv(h.db, '   \n  ', opts)).toEqual({
       imported: 0,
       skipped: 0,
+      duplicates: 0,
       total: 0,
       errors: [],
     })
+  })
+
+  it('is idempotent: re-importing the same file skips duplicates, adds nothing', () => {
+    const csv = [
+      'date,title,amount,currency,category',
+      '2026-07-04,Latte,3.50,INR,Food & Dining',
+      '2026-07-05,Salary,+1000,INR,Income',
+    ].join('\n')
+
+    const first = importEntriesCsv(h.db, csv, opts)
+    expect(first).toMatchObject({ imported: 2, duplicates: 0, skipped: 0, total: 2 })
+
+    const second = importEntriesCsv(h.db, csv, opts)
+    expect(second).toMatchObject({ imported: 0, duplicates: 2, skipped: 0, total: 2 })
+    // No new rows written on the second pass.
+    expect(listEntries(h.db)).toHaveLength(2)
+  })
+
+  it('dedups on date+title+amount+currency only — case/currency-folded, category-blind', () => {
+    const base = 'date,title,amount,currency,category\n2026-07-04,Coffee,3.50,eur,Food & Dining'
+    expect(importEntriesCsv(h.db, base, opts).imported).toBe(1)
+
+    // Same identity but different title-case, currency-case, and category → still a duplicate.
+    const variant = 'date,title,amount,currency,category\n2026-07-04,COFFEE,3.50,EUR,Travel'
+    const report = importEntriesCsv(h.db, variant, opts)
+    expect(report).toMatchObject({ imported: 0, duplicates: 1 })
+    expect(listEntries(h.db)).toHaveLength(1)
+  })
+
+  it('collapses duplicates WITHIN a single imported file', () => {
+    const csv = [
+      'date,title,amount,currency,category',
+      '2026-07-04,Bus,2.00,INR,Transport',
+      '2026-07-04,Bus,2.00,INR,Transport',
+    ].join('\n')
+    const report = importEntriesCsv(h.db, csv, opts)
+    expect(report).toMatchObject({ imported: 1, duplicates: 1, total: 2 })
+    expect(listEntries(h.db)).toHaveLength(1)
+  })
+
+  it('does not dedup against soft-deleted entries — a re-import re-adds them', () => {
+    const csv = 'date,title,amount,currency,category\n2026-07-04,Ghost,9.00,INR,Miscellaneous'
+    expect(importEntriesCsv(h.db, csv, opts).imported).toBe(1)
+    const ghost = listEntries(h.db).find((e) => e.title === 'Ghost')!
+    softDeleteEntry(h.db, ghost.id)
+
+    // The live match is gone, so the same row imports again rather than being skipped.
+    const report = importEntriesCsv(h.db, csv, opts)
+    expect(report).toMatchObject({ imported: 1, duplicates: 0 })
   })
 
   it('throws a clear error when required columns are missing', () => {
