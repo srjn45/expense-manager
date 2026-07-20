@@ -41,3 +41,6 @@ example
 # generated native folders
 /ios
 /android
+
+# Google Play submit credentials (eas submit) — never commit this
+google-service-account.json
