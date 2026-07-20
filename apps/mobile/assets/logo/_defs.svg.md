@@ -26,10 +26,10 @@ Two geometries are used:
 
 ## Files
 
-| SVG | Renders to | Notes |
-|-----|-----------|-------|
-| `logo-icon.svg` | `images/icon.png`, `images/favicon.png`, `docs/assets/*` | primary, opaque |
-| `logo-background.svg` | `images/android-icon-background.png` | gradient only |
-| `logo-foreground.svg` | `images/android-icon-foreground.png` | chevron, transparent |
-| `logo-monochrome.svg` | `images/android-icon-monochrome.png` | flat white, transparent |
-| `logo-splash.svg` | `images/splash-icon.png` | white chevron, transparent |
+| SVG                   | Renders to                                               | Notes                      |
+| --------------------- | -------------------------------------------------------- | -------------------------- |
+| `logo-icon.svg`       | `images/icon.png`, `images/favicon.png`, `docs/assets/*` | primary, opaque            |
+| `logo-background.svg` | `images/android-icon-background.png`                     | gradient only              |
+| `logo-foreground.svg` | `images/android-icon-foreground.png`                     | chevron, transparent       |
+| `logo-monochrome.svg` | `images/android-icon-monochrome.png`                     | flat white, transparent    |
+| `logo-splash.svg`     | `images/splash-icon.png`                                 | white chevron, transparent |

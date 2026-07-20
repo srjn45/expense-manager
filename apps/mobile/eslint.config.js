@@ -10,4 +10,21 @@ module.exports = defineConfig([
   {
     ignores: ['dist/*', '.expo/*', 'src/db/migrations/*', 'node_modules/*'],
   },
+  {
+    // .cjs files (e.g. assets/logo/render.cjs) run under plain Node/CommonJS,
+    // not the app's React Native/ESM environment.
+    files: ['**/*.cjs'],
+    languageOptions: {
+      sourceType: 'commonjs',
+      globals: {
+        __dirname: 'readonly',
+        __filename: 'readonly',
+        require: 'readonly',
+        module: 'readonly',
+        exports: 'writable',
+        process: 'readonly',
+        console: 'readonly',
+      },
+    },
+  },
 ])
