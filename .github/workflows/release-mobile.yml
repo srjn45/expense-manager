@@ -129,9 +129,43 @@ jobs:
             echo "KEPT_UPLOAD_KEY_PASSWORD=${{ secrets.ANDROID_KEY_PASSWORD }}"
           } >> android/gradle.properties
 
+      # DIAGNOSTIC (temporary): Gradle spawns `node` for the Expo autolinking
+      # command and captures + discards its stdout on failure, hiding the real
+      # error. Install a `node` shim on PATH that logs the exact argv Gradle
+      # passes and tees node's stderr to a file, so we can see both. Remove once
+      # the true cause is fixed.
+      - name: DIAG - install node shim
+        run: |
+          REAL_NODE="$(command -v node)"
+          echo "real node: $REAL_NODE"
+          SHIM_DIR="$RUNNER_TEMP/shim"
+          mkdir -p "$SHIM_DIR"
+          cat > "$SHIM_DIR/node" <<SHIM
+          #!/usr/bin/env bash
+          LOG="$RUNNER_TEMP/node-shim.log"
+          {
+            echo "=== NODE-SHIM cwd=\$PWD ==="
+            i=0; for a in "\$@"; do echo "  arg[\$i]=[\$a]"; i=\$((i+1)); done
+          } >> "\$LOG"
+          "$REAL_NODE" "\$@" 2> >(tee -a "\$LOG" >&2)
+          rc=\$?
+          echo "=== NODE-SHIM exit \$rc ===" >> "\$LOG"
+          exit \$rc
+          SHIM
+          chmod +x "$SHIM_DIR/node"
+          echo "$SHIM_DIR" >> "$GITHUB_PATH"
+
       - name: Build signed release APK
         working-directory: apps/mobile/android
         run: ./gradlew :app:assembleRelease --no-daemon --stacktrace
+
+      - name: DIAG - print node shim log
+        if: always()
+        run: |
+          echo "=== entries mentioning autolinking / mirror ==="
+          grep -nE "mirror-kotlin-inline-modules|autolinking failed|argument missing|Generation path|Error:|NODE-SHIM exit [^0]" "$RUNNER_TEMP/node-shim.log" || true
+          echo "=== last 120 lines of shim log ==="
+          tail -120 "$RUNNER_TEMP/node-shim.log" || echo "(no shim log)"
 
       - name: Stage APK as kept.apk
         run: cp android/app/build/outputs/apk/release/app-release.apk kept.apk
