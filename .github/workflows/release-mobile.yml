@@ -1,17 +1,19 @@
 name: Release Mobile
 
 # Cuts a public release: verifies the mobile app (mirrors Mobile CI), builds a
-# signed Android APK on the runner with Gradle (no EAS, no build quota), and
-# publishes it as a GitHub Release so the promo site's fixed download URL
+# signed Android APK (sideload testing) AND an AAB (Play Console upload) on the
+# runner with Gradle (no EAS, no build quota), and publishes both as a GitHub
+# Release so the promo site's fixed download URL
 # (releases/latest/download/kept.apk) picks it up. See RELEASING.md.
 #
 # Trigger a release by bumping apps/mobile/app.json's expo.version (and
-# package.json's version) on main, then tagging that commit and pushing the tag:
+# package.json's version, and android.versionCode) on main, then tagging that
+# commit and pushing the tag:
 #   git tag v1.2.0 && git push origin v1.2.0
 #
-# You can also run it manually (workflow_dispatch) to build + upload the APK as
-# a run artifact WITHOUT publishing a release — useful for smoke-testing the
-# build itself.
+# You can also run it manually (workflow_dispatch) to build + upload the
+# APK/AAB as run artifacts WITHOUT publishing a release — useful for
+# smoke-testing the build itself.
 #
 # Signing: the APK is signed with the keystore in repo secrets
 # (ANDROID_KEYSTORE_BASE64 / *_PASSWORD / ANDROID_KEY_ALIAS), fed into the
@@ -33,6 +35,10 @@ permissions:
 env:
   # Keep in sync with the Expo SDK's Android toolchain (SDK 57 → NDK 27.1).
   ANDROID_NDK_VERSION: '27.1.12297006'
+  # The Kept Play upload key's certificate SHA-256. A build signed by anything
+  # else (misconfigured secret, wrong keystore) must fail before it can ship --
+  # a wrongly-signed artifact uploaded to Play is not recoverable.
+  EXPECTED_CERT_SHA256: c039b2f98b4920c74d4b2c24e70f98a14de62f92068986145332dc3aba87420a
 
 jobs:
   verify:
@@ -113,18 +119,34 @@ jobs:
             echo "KEPT_UPLOAD_KEY_PASSWORD=${{ secrets.ANDROID_KEY_PASSWORD }}"
           } >> android/gradle.properties
 
-      - name: Build signed release APK
+      - name: Build signed release APK and AAB
         working-directory: apps/mobile/android
-        run: ./gradlew :app:assembleRelease --no-daemon
+        run: ./gradlew :app:assembleRelease :app:bundleRelease --no-daemon
 
-      - name: Stage APK as kept.apk
-        run: cp android/app/build/outputs/apk/release/app-release.apk kept.apk
-
-      - name: Verify APK is signed with the release key
+      - name: Stage artifacts as kept.apk / kept.aab
         run: |
-          SIG=$(unzip -p kept.apk META-INF/*.RSA | keytool -printcert | grep SHA256 | tr -d ' ')
-          echo "APK signer: $SIG"
-          test -n "$SIG"
+          cp android/app/build/outputs/apk/release/app-release.apk kept.apk
+          cp android/app/build/outputs/bundle/release/app-release.aab kept.aab
+          ls -lh kept.apk kept.aab
+
+      - name: Verify artifacts are signed with the release key
+        run: |
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -1)
+          ACTUAL=$("$APKSIGNER" verify --print-certs kept.apk \
+            | grep -m1 'certificate SHA-256 digest' | awk '{print $NF}')
+          echo "APK signer cert: $ACTUAL"
+          if [ "$ACTUAL" != "$EXPECTED_CERT_SHA256" ]; then
+            echo "::error::APK signing cert mismatch: expected $EXPECTED_CERT_SHA256" >&2
+            exit 1
+          fi
+          # AABs are JAR-signed, not APK-Scheme-signed -- check via keytool.
+          AAB_ACTUAL=$(keytool -printcert -jarfile kept.aab \
+            | grep -m1 'SHA256:' | awk '{print $2}' | tr -d ':' | tr 'A-F' 'a-f')
+          echo "AAB signer cert: $AAB_ACTUAL"
+          if [ "$AAB_ACTUAL" != "$EXPECTED_CERT_SHA256" ]; then
+            echo "::error::AAB signing cert mismatch: expected $EXPECTED_CERT_SHA256" >&2
+            exit 1
+          fi
 
       # Tag build → publish a GitHub Release the promo site can serve.
       - name: Create GitHub Release
@@ -134,6 +156,7 @@ jobs:
         run: |
           gh release create "$GITHUB_REF_NAME" \
             ./kept.apk#kept.apk \
+            ./kept.aab#kept.aab \
             --repo "${{ github.repository }}" \
             --target main \
             --title "Kept $GITHUB_REF_NAME" \
@@ -145,11 +168,21 @@ jobs:
           curl -sL -o /dev/null -w '%{http_code} %{content_type}\n' \
             "https://github.com/${{ github.repository }}/releases/latest/download/kept.apk"
 
-      # Manual run (no tag) → keep the APK as a run artifact for smoke-testing.
-      - name: Upload APK artifact
+      # Manual run (no tag) → keep the artifacts for smoke-testing.
+      - name: Upload APK/AAB artifacts
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
         uses: actions/upload-artifact@v4
         with:
           name: kept-apk
-          path: apps/mobile/kept.apk
+          path: |
+            apps/mobile/kept.apk
+            apps/mobile/kept.aab
           if-no-files-found: error
+
+      # Runners are ephemeral, but the keystore + passwords are the app's
+      # permanent signing identity -- do not leave them lying around post-build.
+      - name: Scrub signing credentials
+        if: always()
+        run: |
+          shred -u "$RUNNER_TEMP/release.jks" 2>/dev/null || true
+          sed -i '/^KEPT_UPLOAD_/d' android/gradle.properties 2>/dev/null || true
