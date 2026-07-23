@@ -33,10 +33,6 @@ permissions:
 env:
   # Keep in sync with the Expo SDK's Android toolchain (SDK 57 → NDK 27.1).
   ANDROID_NDK_VERSION: '27.1.12297006'
-  # Gradle spawns node for Expo/RN autolinking + codegen during configuration.
-  # The default heap is too small for these on memory-limited runners, so the
-  # node subprocess can die with a bare "exit value 1" mid-config. Give it room.
-  NODE_OPTIONS: '--max-old-space-size=4096'
 
 jobs:
   verify:
@@ -105,67 +101,27 @@ jobs:
       - name: Prebuild native Android project
         run: npx expo prebuild --platform android --no-install
 
-      # Work around an Expo autolinking Gradle-plugin quirk: during
-      # projectsEvaluated it runs `expo-modules-autolinking
-      # mirror-kotlin-inline-modules` with
-      # `--watched-directories-serialized <findProperty(...) ?: emptyList()>`.
-      # When the property is unset, Gradle flattens the empty list to *zero*
-      # args, so the flag is passed with no value and node aborts with
-      # "argument missing" (surfaced only as a bare "node exit value 1"
-      # because Gradle captures that command's stdout). Setting the property to
-      # a literal empty-JSON-array string makes it a single valid argument.
-      - name: Work around Expo autolinking empty-list arg
-        run: echo 'expo.inlineModules.watchedDirectories=[]' >> android/gradle.properties
-
       - name: Decode signing keystore
         run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/release.jks"
 
       - name: Configure release signing
+        # The leading blank line is required: `expo prebuild` writes the last
+        # gradle.properties line (expo.inlineModules.watchedDirectories=[])
+        # WITHOUT a trailing newline, so appending directly would concatenate
+        # onto it and corrupt that property's value — which then reaches the
+        # Expo autolinking node command as invalid JSON and aborts the build.
         run: |
           {
+            echo ""
             echo "KEPT_UPLOAD_STORE_FILE=$RUNNER_TEMP/release.jks"
             echo "KEPT_UPLOAD_STORE_PASSWORD=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}"
             echo "KEPT_UPLOAD_KEY_ALIAS=${{ secrets.ANDROID_KEY_ALIAS }}"
             echo "KEPT_UPLOAD_KEY_PASSWORD=${{ secrets.ANDROID_KEY_PASSWORD }}"
           } >> android/gradle.properties
 
-      # DIAGNOSTIC (temporary): Gradle spawns `node` for the Expo autolinking
-      # command and captures + discards its stdout on failure, hiding the real
-      # error. Install a `node` shim on PATH that logs the exact argv Gradle
-      # passes and tees node's stderr to a file, so we can see both. Remove once
-      # the true cause is fixed.
-      - name: DIAG - install node shim
-        run: |
-          REAL_NODE="$(command -v node)"
-          echo "real node: $REAL_NODE"
-          SHIM_DIR="$RUNNER_TEMP/shim"
-          mkdir -p "$SHIM_DIR"
-          cat > "$SHIM_DIR/node" <<SHIM
-          #!/usr/bin/env bash
-          LOG="$RUNNER_TEMP/node-shim.log"
-          {
-            echo "=== NODE-SHIM cwd=\$PWD ==="
-            i=0; for a in "\$@"; do echo "  arg[\$i]=[\$a]"; i=\$((i+1)); done
-          } >> "\$LOG"
-          "$REAL_NODE" "\$@" 2> >(tee -a "\$LOG" >&2)
-          rc=\$?
-          echo "=== NODE-SHIM exit \$rc ===" >> "\$LOG"
-          exit \$rc
-          SHIM
-          chmod +x "$SHIM_DIR/node"
-          echo "$SHIM_DIR" >> "$GITHUB_PATH"
-
       - name: Build signed release APK
         working-directory: apps/mobile/android
-        run: ./gradlew :app:assembleRelease --no-daemon --stacktrace
-
-      - name: DIAG - print node shim log
-        if: always()
-        run: |
-          echo "=== entries mentioning autolinking / mirror ==="
-          grep -nE "mirror-kotlin-inline-modules|autolinking failed|argument missing|Generation path|Error:|NODE-SHIM exit [^0]" "$RUNNER_TEMP/node-shim.log" || true
-          echo "=== last 120 lines of shim log ==="
-          tail -120 "$RUNNER_TEMP/node-shim.log" || echo "(no shim log)"
+        run: ./gradlew :app:assembleRelease --no-daemon
 
       - name: Stage APK as kept.apk
         run: cp android/app/build/outputs/apk/release/app-release.apk kept.apk
